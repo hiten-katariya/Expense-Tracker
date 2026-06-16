@@ -25,6 +25,7 @@ erDiagram
 	workspaces ||--o{ expenses : contains
 	workspaces ||--o{ budgets : contains
 	workspaces ||--o{ notifications : generates
+	families ||--o{ notifications : generates
 	workspaces ||--o{ audit_logs : records
 	workspaces ||--o{ filter_presets : saves
 	workspaces ||--o{ receipt_ocr_cache : stores
@@ -216,6 +217,7 @@ Tracks in-app and email alert history.
 |---|---|---|---|
 | id | uuid | PK | Notification identifier |
 | workspace_id | uuid | not null, references `workspaces(id)` on delete cascade | Owning workspace |
+| family_id | uuid | references `families(id)` on delete cascade | Optional family scope |
 | user_id | uuid | not null, references `profiles(id)` on delete cascade | Notification recipient |
 | type | text | not null | Budget, anomaly, summary, reminder, or verification |
 | title | text | not null | Short notification title |
@@ -390,6 +392,7 @@ Records threshold and predictive alert generation for idempotency.
 - `family_invites`: admins can create invites; invitees can read invites sent to their email.
 - `workspaces`: only members can read a workspace; only admins or owners can update it.
 - `workspace_members`: members can read their membership rows; only admins can manage membership.
+- `categories`, `expenses`, `budgets`, `notifications`, `audit_logs`, `receipts_ocr_cache`, `filter_presets`, `exchange_rates`: access must be limited to users who belong to the workspace or family linked to the record.
 - `categories`, `expenses`, `budgets`, `notifications`, `audit_logs`, `receipts_ocr_cache`, `filter_presets`, `exchange_rates`: access must be limited to users who belong to the workspace or family linked to the record.
 
 ## 9. Notes For Supabase Implementation

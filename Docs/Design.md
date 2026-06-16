@@ -1,156 +1,855 @@
-Here is the comprehensive UI Design Document for your **Project Expense Tracker**, combining the specific requirements from your PRD with the premium, award-winning aesthetic of the Premier Construction Software reference site.
+# EXPENSEAI - MASTER UI/UX DESIGN DOCUMENT
+
+## PROJECT OVERVIEW
+
+ExpenseAI is an AI-powered Financial Operating System designed for individuals, families, freelancers, and small businesses.
+
+Unlike traditional expense trackers, ExpenseAI combines:
+
+* Expense Management
+* Budget Planning
+* AI Categorization
+* Receipt OCR
+* Family Expense Management
+* Financial Analytics
+* AI Insights
+* Spending Forecasting
+* Security & Compliance
+
+The product should feel like a premium SaaS platform similar to:
+
+* Premier Construction Software
+* Ramp
+* Brex
+* Mercury
+* Stripe
+* Linear
+* Notion
+
+NOT like a typical expense tracker.
 
 ---
 
-# UI Design Document: AI-Powered Expense Tracker
+# DESIGN PRINCIPLES
 
-**Design Theme:** Premium Financial SaaS / Modern ERP
-**Reference Aesthetic:** Premier Construction Software (Awwwards)
-**Vibe:** Professional, deeply trustworthy, highly analytical, and effortlessly modern. It should feel like an enterprise-grade tool but with consumer-grade ease of use.
+### Premium Enterprise Experience
 
----
+Every screen should feel polished and professional.
 
-## 1. Global Styles & Visual Language
+### AI First
 
-### Typography
+AI should appear throughout the application.
 
-* **Primary Font:** *Inter* or *Plus Jakarta Sans* (Clean, geometric, highly legible for dense financial data).
-* **Headers:** Heavy weights (Bold/Extrabold) with tight letter spacing for a structural, architectural feel.
-* **Tabular Data:** Use tabular figures (monospaced numbers) so financial amounts align perfectly in columns.
+### Financial Confidence
 
-### Color Palette
+Users should immediately understand:
 
-* **Backgrounds:** * App Background: `#F5F7FA` (A very soft, cool-toned off-white to reduce eye strain).
-* Cards/Modules: `#FFFFFF` (Pure white) with extremely subtle, soft drop shadows for slight elevation.
+* Where money is going
+* How budgets are performing
+* What actions should be taken
 
+### Fast Data Entry
 
-* **Brand/Primary Accents:**
-* Primary Action: `#1E3A5F` (Deep Midnight Blue) – conveys security and trust.
-* Secondary Accent: `#4A90D9` (Vibrant Sky Blue) – used for hover states and active navigation.
+Expense creation should require minimal effort.
 
+### Family Collaboration
 
-* **Semantic / Status Colors (Crucial for Financials):**
-* *Safe/Under Budget:* `#27AE60` (Emerald Green)
-* *Warning/Near Budget:* `#E67E22` (Warm Amber)
-* *Danger/Anomaly/Over Budget:* `#E74C3C` (Vibrant Crimson)
-* *AI Magic/Insights:* `#7B2FBE` (Deep Royal Purple) – used whenever GPT-4o is doing work (e.g., auto-categorization pills, insight cards).
-
-
-
-### UI Components & Micro-interactions
-
-* **Shapes:** Slightly rounded corners on cards and buttons (8px radius). Minimal borders (`#E5E7EB`) to let the data breathe.
-* **Micro-interactions:** * *Hover:* Rows in the expense table gently highlight; cards slightly lift on the Y-axis.
-* *Skeleton Loading:* Instead of spinning wheels, use shimmering gray wireframes for charts and tables while React Query fetches data.
-
-
-* **Dark Mode:** A deep slate-blue background (`#0F172A`) with neon-tinged accents for high-contrast nighttime viewing.
+Family finances should feel collaborative and transparent.
 
 ---
 
-## 2. Global Layout Architecture
+# DESIGN SYSTEM
 
-**Persistent App Shell**
+## Colors
 
-* **Left Sidebar (Fixed):** Dark theme (`#1E3A5F`). Contains the user's workspace switcher, main navigation (Dashboard, Expenses, Categories, Budgets, Reports, Insights, Settings), and a bottom-anchored User Profile & Logout button.
-* **Top Bar (Sticky):** * Global Search input (Cmd+K shortcut to search across titles, tags, and notes).
-* "Smart Add Expense" primary button (triggers the OCR/AI slide-out).
-* Notification Bell (with a red dot if there are budget alerts or AI anomalies).
+Background Primary
+#050816
 
+Background Secondary
+#0D1325
 
-* **Main Workspace:** Scrollable area where page content lives inside modular, well-spaced white cards.
+Card Surface
+#111827
 
----
+Card Elevated
+#172033
 
-## 3. Core Screens & UI Breakdown
+Primary Blue
+#4F8CFF
 
-### Page 1: The Dashboard (`/dashboard`)
+Secondary Blue
+#63B3FF
 
-*The command center. High data density but visually organized.*
+Success
+#22C55E
 
-* **Hero Metrics Row:** 4 interlocking cards at the top.
-* *Total Spent This Month* (vs. Last Month delta badge in green/red).
-* *Remaining Budget* (with a mini progress bar).
-* *Pending Anomalies* (Highlighted in purple/red if GPT-4o flagged something).
-* *Recent Activity Count.*
+Warning
+#F59E0B
 
+Danger
+#EF4444
 
-* **Main Split View:**
-* **Left Column (60%):** "Monthly Spending Trend". A sleek Recharts bar chart. Hovering over a bar shows a glassmorphic tooltip with the exact INR amount.
-* **Right Column (40%):** "Category Breakdown". A smooth, animated Doughnut chart. The center of the doughnut displays the total spent.
+Text Primary
+#FFFFFF
 
+Text Secondary
+#94A3B8
 
-* **Bottom Module:** "Recent Expenses". A stripped-down, 5-row preview of the main data table.
-
-### Page 2: Expense Ledger (`/expenses`)
-
-*The workhorse page. Focuses on speed, filtering, and readability.*
-
-* **Control Header:**
-* Filter pill-buttons: "This Month", "Category", "Payment Method", "Tags".
-* Export button (PDF/CSV icon).
-
-
-* **The Data Table:**
-* Columns: Date, Title, Category (renders as a colored badge with an emoji, e.g., 🍔 Food), Amount (bolded), Status/Flags.
-* **AI Anomaly Flagging:** If an expense deviates by 2.5 standard deviations (per the PRD), a red `!` icon pulses next to the amount. Clicking it opens a popover explaining why it was flagged.
-* **Inline Editing:** Clicking a row expands it slightly to reveal quick-edit fields and the receipt thumbnail, preventing context loss.
-
-
-
-### Page 3: Smart Add Expense & OCR (`/expenses/new` via Slide-out Drawer)
-
-*A right-aligned sliding drawer rather than a full page, keeping the user in their current flow.*
-
-* **Top Zone (Receipt Scanner):** A large dashed drop-zone.
-* *Interaction:* User drops a JPG/PDF. A sleek scanning animation (a laser line moving down the image) plays while Tesseract/GPT-4o processes it.
-
-
-* **Auto-fill Form:**
-* Fields instantly populate.
-* **AI Confidence Pills:** If AI confidence is > 0.85, the category is filled with a subtle purple glow. If < 0.85, a tooltip appears: *"AI suggests: Travel. Accept | Change"*.
-* Amount, Date, and Title use large, clear typography.
-
-
-* **Footer Actions:** "Cancel" and "Save Expense".
-
-### Page 4: Budgets & Categories (`/categories` & `/budgets`)
-
-*Visualizing limits and rules.*
-
-* **Layout:** A masonry grid of Cards, one for each category.
-* **Card Anatomy:**
-* Header: Emoji + Category Name (e.g., ✈️ Travel).
-* Middle: A thick, rounded progress bar showing `Spent vs. Budget`.
-* *Color Logic:* Bar is Green (0-50%), turns Amber (50-80%), turns Red (80-100%+).
-* Footer: "Edit Budget" or "View Sub-categories" text link.
-
-
-
-### Page 5: AI Insights & Reports (`/insights` & `/reports`)
-
-*The "wow" factor of the application.*
-
-* **The AI Monthly Report Card:** A prominent, beautifully styled module with a subtle purple gradient background. It houses the GPT-4o natural language summary (e.g., *"You spent 23% more on Food this month...*").
-* **Daily Heatmap (GitHub Style):** A block grid showing the month/year. Darker squares represent higher spending days. Hovering reveals the daily total.
-* **Top Savings Opportunity:** A callout box specifically highlighting the category with the highest variance, suggesting a budget adjustment.
+Border
+rgba(255,255,255,0.08)
 
 ---
 
-## 4. Specific UX Behaviors & Error Handling
+## Typography
 
-* **Empty States:** If a user has no expenses, show a high-quality 3D illustration (e.g., a floating receipt or an empty wallet) with an inviting "Scan your first receipt" button.
-* **Duplicate Warning:** If the system detects a duplicate (same amount/category within 24hrs), slide in a non-intrusive bottom-right toast notification: *"This looks like a duplicate. Review or Dismiss."*
-* **Email Verification Lock:** If `is_email_verified` is false, render a persistent, banner at the very top of the app shell (Amber background): *"Please verify your email to unlock expense creation. [Resend Link]"*.
-* **Form Validation:** Use Zod to provide instant, inline red text below inputs if rules are violated (e.g., negative amounts).
+Font:
+Inter
+
+Hero:
+72px
+
+Section Heading:
+48px
+
+Card Heading:
+24px
+
+Body:
+18px
+
+Small:
+14px
 
 ---
 
-## 5. Asset Preparation for Frontend Devs
+# APPLICATION STRUCTURE
 
-When handing this off to your React/Tailwind developers, instruct them to use:
+Authentication
 
-* **shadcn/ui:** For the foundational components (Buttons, Drawers, Selects, Tables) as it perfectly mimics this clean, geometric SaaS aesthetic.
-* **Lucide React:** For crisp, consistent iconography matching the Premier Construction vibe.
-* **Recharts or Tremor:** For building the financial dashboards with built-in Tailwind support.
-* **Framer Motion:** To implement the layout animations (like the sliding drawer and expanding table rows).
+Dashboard
+
+Expenses
+
+Categories
+
+Budgets
+
+Reports
+
+Analytics
+
+AI Insights
+
+Family
+
+Notifications
+
+Settings
+
+---
+
+# AUTHENTICATION
+
+## Login
+
+Fields
+
+* Email
+* Password
+
+Buttons
+
+* Login
+* Login with Google
+* Login with GitHub
+
+Links
+
+* Forgot Password
+* Register
+
+---
+
+## Registration
+
+Fields
+
+* Name
+* Email
+* Password
+* Confirm Password
+
+Actions
+
+* Register
+* Google Signup
+* GitHub Signup
+
+---
+
+## Email Verification
+
+Components
+
+* Verification Status Card
+* Resend Email Button
+* Success State
+* Failure State
+
+---
+
+# DASHBOARD
+
+Main Overview Screen
+
+---
+
+## Top KPI Row
+
+Card 1
+
+Monthly Spend
+
+₹48,250
+
+Trend %
+
+Card 2
+
+Budget Remaining
+
+₹21,750
+
+Progress Ring
+
+Card 3
+
+Savings Rate
+
+32%
+
+Card 4
+
+AI Health Score
+
+89/100
+
+---
+
+## Analytics Section
+
+Monthly Spending Trend
+
+Line Chart
+
+Category Distribution
+
+Donut Chart
+
+Daily Spending
+
+Heatmap
+
+---
+
+## Recent Expenses
+
+Table
+
+Columns
+
+Date
+
+Title
+
+Category
+
+Amount
+
+Payment Method
+
+Actions
+
+---
+
+## AI Recommendations
+
+Card Examples
+
+You spent 18% more on food this month
+
+Dining expenses increased on weekends
+
+You may exceed your Transport budget in 6 days
+
+Potential monthly savings: ₹3,500
+
+---
+
+# EXPENSE MANAGEMENT
+
+## Expense List
+
+Features
+
+Search
+
+Filters
+
+Pagination
+
+Sorting
+
+Bulk Actions
+
+Export
+
+---
+
+## Filters
+
+Category
+
+Date Range
+
+Amount Range
+
+Tags
+
+Payment Method
+
+Recurring
+
+Family / Personal
+
+---
+
+## Add Expense
+
+Fields
+
+Title
+
+Amount
+
+Date
+
+Category
+
+Notes
+
+Payment Method
+
+Tags
+
+Receipt Upload
+
+Expense Scope
+
+Personal
+
+Family
+
+---
+
+## AI Categorization
+
+After entering expense
+
+Show
+
+Suggested Category
+
+Confidence %
+
+Accept
+
+Reject
+
+---
+
+# RECEIPT OCR
+
+Upload Methods
+
+Drag & Drop
+
+Browse
+
+Camera Capture
+
+---
+
+## Processing Screen
+
+Loading Animation
+
+AI Scanning Status
+
+Extraction Progress
+
+---
+
+## OCR Results
+
+Merchant
+
+Amount
+
+Date
+
+Category
+
+Items
+
+Notes
+
+Editable Before Save
+
+---
+
+# CATEGORY MANAGEMENT
+
+## Category List
+
+Icon
+
+Name
+
+Budget
+
+Progress
+
+Actions
+
+---
+
+## Category Creation
+
+Name
+
+Icon Picker
+
+Color Picker
+
+Budget Limit
+
+Parent Category
+
+---
+
+## Category Details
+
+Spending History
+
+Monthly Budget
+
+Recent Expenses
+
+Analytics
+
+---
+
+# BUDGETS
+
+## Budget Dashboard
+
+Overall Budget
+
+Category Budgets
+
+Family Budget
+
+---
+
+## Budget Cards
+
+Allocated
+
+Spent
+
+Remaining
+
+Forecast
+
+---
+
+## Budget Alerts
+
+50%
+
+80%
+
+100%
+
+Overspending Forecast
+
+---
+
+# REPORTS
+
+## Monthly Report
+
+Total Spend
+
+Top Categories
+
+Trends
+
+Savings
+
+AI Summary
+
+---
+
+## Export
+
+PDF
+
+CSV
+
+Date Range
+
+Category Selection
+
+---
+
+# ANALYTICS
+
+## Overview
+
+Spending Trends
+
+Income vs Expenses
+
+Budget Performance
+
+Savings Growth
+
+---
+
+## Visualizations
+
+Line Chart
+
+Area Chart
+
+Donut Chart
+
+Bar Chart
+
+Heatmap
+
+Forecast Chart
+
+---
+
+## Metrics
+
+Average Daily Spend
+
+Average Transaction Size
+
+Most Active Category
+
+Highest Expense
+
+Budget Utilization
+
+---
+
+# AI INSIGHTS
+
+Dedicated AI Center
+
+---
+
+## AI Features
+
+Spending Analysis
+
+Budget Recommendations
+
+Anomaly Detection
+
+Saving Opportunities
+
+Monthly Reports
+
+Forecasting
+
+---
+
+## AI Insight Card
+
+Title
+
+Summary
+
+Recommendation
+
+Expected Savings
+
+Action Button
+
+---
+
+# ANOMALY DETECTION
+
+Suspicious Expense
+
+Large Transactions
+
+Unusual Categories
+
+Duplicate Entries
+
+Frequency Changes
+
+---
+
+## Alert Card
+
+Reason
+
+Confidence
+
+Date
+
+Suggested Action
+
+Dismiss Button
+
+---
+
+# FAMILY MANAGEMENT
+
+## Family Dashboard
+
+Family Spend
+
+Family Budget
+
+Member Breakdown
+
+Monthly Trends
+
+---
+
+## Members Section
+
+Avatar
+
+Name
+
+Role
+
+Contribution
+
+Actions
+
+---
+
+## Family Expenses
+
+Combined Expense Feed
+
+Filter By Member
+
+Filter By Category
+
+---
+
+## Invite Flow
+
+Email Invite
+
+Share Link
+
+Copy Invite
+
+Expiration Status
+
+---
+
+## Family Analytics
+
+Contribution %
+
+Category Breakdown
+
+Monthly Comparison
+
+Member Ranking
+
+---
+
+# NOTIFICATIONS
+
+Notification Center
+
+---
+
+Types
+
+Budget Alert
+
+Family Alert
+
+AI Insight
+
+Expense Reminder
+
+Anomaly Alert
+
+Verification Alert
+
+---
+
+# SETTINGS
+
+## Profile
+
+Avatar
+
+Name
+
+Email
+
+Currency
+
+Timezone
+
+---
+
+## Security
+
+Password
+
+MFA
+
+Sessions
+
+Devices
+
+---
+
+## Preferences
+
+Theme
+
+Notifications
+
+Currency
+
+Language
+
+---
+
+# ADMIN & SECURITY
+
+Audit Logs
+
+Session History
+
+Data Export
+
+Account Deletion
+
+Privacy Settings
+
+GDPR Controls
+
+---
+
+# MOBILE EXPERIENCE
+
+Bottom Navigation
+
+Dashboard
+
+Expenses
+
+Add
+
+AI
+
+Profile
+
+---
+
+Quick Actions
+
+Add Expense
+
+Scan Receipt
+
+View Budget
+
+AI Insight
+
+---
+
+# MICRO INTERACTIONS
+
+Hover Elevation
+
+Card Glow
+
+Animated Charts
+
+Number Counters
+
+Page Transitions
+
+Smooth Loading States
+
+Success Animations
+
+Toast Notifications
+
+---
+
+# EMPTY STATES
+
+No Expenses
+
+No Family
+
+No Categories
+
+No Reports
+
+No Insights
+
+Provide CTA for every empty state.
+
+---
+
+# LOADING STATES
+
+Skeleton Screens
+
+Chart Placeholders
+
+Table Placeholders
+
+Dashboard Loaders
+
+No Spinners
+
+---
+
+# FINAL GOAL
+
+The final application should feel like a premium AI-powered Financial Operating System with enterprise-grade quality, advanced analytics, family collaboration, and intelligent automation.
+
+Every screen should communicate:
+
+Trust
+Intelligence
+Control
+Financial Clarity
+Modern Technology
+
+Visual quality should match Premier Construction Software while maintaining the usability standards of Stripe, Ramp, Mercury, and Linear.
