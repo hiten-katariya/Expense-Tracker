@@ -6,7 +6,7 @@ import { LayoutDashboard, Receipt, FolderOpen, Target, ChartPie as PieChart, Set
 import { IconButton } from './Button';
 
 const navItems = [
-  { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
+  { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { path: '/expenses', icon: Receipt, label: 'Expenses' },
   { path: '/categories', icon: FolderOpen, label: 'Categories' },
   { path: '/budgets', icon: Target, label: 'Budgets' },
