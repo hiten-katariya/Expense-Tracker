@@ -312,8 +312,19 @@ export function ExpenseFormPage() {
         addNotification({ type: 'success', title: 'Expense added', message: 'Your expense has been recorded.' });
       }
       navigate('/expenses');
-    } catch {
-      addNotification({ type: 'error', title: 'Error', message: 'Failed to save expense' });
+    } catch (err: any) {
+      console.error("onSubmit Error saving expense:");
+      if (err) {
+        console.error("Code:", err.code);
+        console.error("Message:", err.message);
+        console.error("Details:", err.details);
+        console.error("Hint:", err.hint);
+      }
+      addNotification({
+        type: 'error',
+        title: 'Error',
+        message: err?.message || 'Failed to save expense'
+      });
     }
   };
 

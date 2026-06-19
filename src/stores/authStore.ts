@@ -90,6 +90,23 @@ async function createPersonalWorkspace(userId?: string): Promise<Workspace | nul
     throw new Error(errorMsg);
   }
 
+  // Fix #3: Never Create Workspace Without Rechecking
+  console.log("Checking personal workspace...");
+  const existingWorkspace = await supabase
+    .from("workspaces")
+    .select("*")
+    .eq("owner_id", ownerId)
+    .eq("is_personal", true)
+    .maybeSingle();
+
+  console.log("Workspace query result:", existingWorkspace.data);
+  console.log("Workspace query error:", existingWorkspace.error);
+
+  if (existingWorkspace.data) {
+    console.log("Workspace already exists.");
+    return existingWorkspace.data;
+  }
+
   const payload = {
     name: "Personal Workspace",
     owner_id: ownerId,
@@ -101,16 +118,39 @@ async function createPersonalWorkspace(userId?: string): Promise<Workspace | nul
   console.log("Workspace insert payload:", payload);
 
   try {
-    const { data: workspace, error: wError } = await supabase
+    let workspace: Workspace | null = null;
+    const { data: insertData, error: wError } = await supabase
       .from("workspaces")
       .insert(payload)
       .select()
-      .single();
+      .maybeSingle();
 
     if (wError) {
-      console.error(`[createPersonalWorkspace] Error inserting workspace record:`, wError);
-      console.error(`[createPersonalWorkspace] Error details: code=${wError.code}, message=${wError.message}, details=${wError.details}, hint=${wError.hint}`);
-      throw wError;
+      // Fix #4: Handle Duplicate Workspace Error Gracefully
+      if (wError.code === "23505") {
+        console.log("Workspace already exists. Fetching existing workspace.");
+        const reQuery = await supabase
+          .from("workspaces")
+          .select("*")
+          .eq("owner_id", ownerId)
+          .eq("is_personal", true)
+          .maybeSingle();
+        
+        console.log("Workspace query result:", reQuery.data);
+        console.log("Workspace query error:", reQuery.error);
+
+        if (reQuery.data) {
+          workspace = reQuery.data;
+        } else {
+          throw reQuery.error || new Error("Failed to fetch existing workspace after 23505 error");
+        }
+      } else {
+        console.error(`[createPersonalWorkspace] Error inserting workspace record:`, wError);
+        console.error(`[createPersonalWorkspace] Error details: code=${wError.code}, message=${wError.message}, details=${wError.details}, hint=${wError.hint}`);
+        throw wError;
+      }
+    } else {
+      workspace = insertData;
     }
 
     if (!workspace || !workspace.id) {
@@ -121,32 +161,62 @@ async function createPersonalWorkspace(userId?: string): Promise<Workspace | nul
 
     console.log(`[createPersonalWorkspace] Workspace created successfully:`, workspace);
 
-    console.log(`[createPersonalWorkspace] Creating workspace membership admin row for workspace: ${workspace.id}, profile: ${ownerId}`);
-    const { error: mError } = await supabase
+    // Fix #5: Prevent Duplicate Membership Creation
+    console.log(`[createPersonalWorkspace] Checking if workspace membership admin row already exists for workspace: ${workspace.id}, profile: ${ownerId}`);
+    const { data: existingMembership, error: memCheckError } = await supabase
       .from('workspace_members')
-      .insert({
-        workspace_id: workspace.id,
-        profile_id: ownerId,
-        member_role: 'admin',
-        joined_at: new Date().toISOString()
-      });
+      .select('id')
+      .eq('workspace_id', workspace.id)
+      .eq('profile_id', ownerId)
+      .maybeSingle();
 
-    if (mError) {
-      console.error(`[createPersonalWorkspace] Error inserting workspace member row:`, mError);
-      console.error(`[createPersonalWorkspace] Member error details: code=${mError.code}, message=${mError.message}, details=${mError.details}, hint=${mError.hint}`);
-      throw mError;
+    if (memCheckError) {
+      console.error(`[createPersonalWorkspace] Error checking membership existence:`, memCheckError);
     }
 
-    console.log(`[createPersonalWorkspace] Workspace member admin record inserted successfully`);
+    if (!existingMembership) {
+      console.log(`[createPersonalWorkspace] Creating workspace membership admin row for workspace: ${workspace.id}, profile: ${ownerId}`);
+      const { error: mError } = await supabase
+        .from('workspace_members')
+        .insert({
+          workspace_id: workspace.id,
+          profile_id: ownerId,
+          member_role: 'admin',
+          joined_at: new Date().toISOString()
+        });
 
-    // Only seed categories after a valid workspace.id exists
-    console.log(`[createPersonalWorkspace] Seeding default categories for workspace: ${workspace.id}`);
-    try {
-      const { seedDefaultCategories } = await import('@/lib/categories');
-      await seedDefaultCategories(workspace.id);
-      console.log(`[createPersonalWorkspace] Default categories seeding complete.`);
-    } catch (catErr) {
-      console.error(`[createPersonalWorkspace] Failed to seed default categories:`, catErr);
+      if (mError) {
+        console.error(`[createPersonalWorkspace] Error inserting workspace member row:`, mError);
+        console.error(`[createPersonalWorkspace] Member error details: code=${mError.code}, message=${mError.message}, details=${mError.details}, hint=${mError.hint}`);
+        throw mError;
+      }
+      console.log(`[createPersonalWorkspace] Workspace member admin record inserted successfully`);
+    } else {
+      console.log(`[createPersonalWorkspace] Workspace membership admin row already exists:`, existingMembership.id);
+    }
+
+    // Fix #6: Prevent Duplicate Category Seeding
+    console.log(`[createPersonalWorkspace] Checking category count for workspace: ${workspace.id}`);
+    const { count, error: countError } = await supabase
+      .from('categories')
+      .select('*', { count: 'exact', head: true })
+      .eq('workspace_id', workspace.id);
+
+    if (countError) {
+      console.error(`[createPersonalWorkspace] Error checking categories count:`, countError);
+    }
+
+    if (!countError && count === 0) {
+      console.log(`[createPersonalWorkspace] Seeding default categories for workspace: ${workspace.id}`);
+      try {
+        const { seedDefaultCategories } = await import('@/lib/categories');
+        await seedDefaultCategories(workspace.id);
+        console.log(`[createPersonalWorkspace] Default categories seeding complete.`);
+      } catch (catErr) {
+        console.error(`[createPersonalWorkspace] Failed to seed default categories:`, catErr);
+      }
+    } else {
+      console.log(`[createPersonalWorkspace] Categories already exist (count: ${count}), skipping seed.`);
     }
 
     return workspace;
@@ -156,123 +226,159 @@ async function createPersonalWorkspace(userId?: string): Promise<Workspace | nul
   }
 }
 
-async function ensureUserResources(user: User): Promise<{ profile: Profile | null; workspace: Workspace | null }> {
+let resourceInitializationRunning = false;
+
+export async function ensureUserResources(user: User): Promise<{ profile: Profile | null; workspace: Workspace | null }> {
+  // Fix #5: Add Global Initialization Lock
+  if (resourceInitializationRunning) {
+    console.log("[ensureUserResources] Resource initialization already running, returning current state.");
+    const state = useAuthStore.getState();
+    return { profile: state.profile, workspace: state.workspace };
+  }
+
+  resourceInitializationRunning = true;
+  
+  // Fix #6: Verify ensureUserResources Call Count
+  console.count("ensureUserResources");
+  console.log("ensureUserResources called");
   console.log(`[ensureUserResources] Verification sequence started for user: ${user.id} (${user.email})`);
   
-  // 1. Ensure Profile exists
-  let profile = await getProfile(user.id);
-  if (!profile) {
-    console.log(`[ensureUserResources] Profile not found for user ${user.id}. Creating fallback profile...`);
-    profile = await createProfileFallback(user);
-    if (profile) {
-      console.log(`[ensureUserResources] Fallback profile created successfully:`, profile);
-    } else {
-      console.error(`[ensureUserResources] Critical: Fallback profile creation failed/returned null.`);
-    }
-  } else {
-    console.log(`[ensureUserResources] Profile verified:`, profile);
-  }
-
-  // 2. Ensure Personal Workspace exists
-  let workspace: Workspace | null = null;
   try {
-    console.log(`[ensureUserResources] Querying workspaces for user: ${user.id}`);
-    const { data, error: wSelectError } = await supabase
-      .from('workspaces')
-      .select('*')
-      .eq('owner_id', user.id)
-      .eq('is_personal', true)
-      .maybeSingle();
-
-    if (wSelectError) {
-      console.error(`[ensureUserResources] Error querying workspaces:`, wSelectError);
-      console.error(`[ensureUserResources] Workspace query details: code=${wSelectError.code}, message=${wSelectError.message}, details=${wSelectError.details}, hint=${wSelectError.hint}`);
+    // 1. Ensure Profile exists
+    let profile = await getProfile(user.id);
+    if (!profile) {
+      console.log(`[ensureUserResources] Profile not found for user ${user.id}. Creating fallback profile...`);
+      profile = await createProfileFallback(user);
+      if (profile) {
+        console.log(`[ensureUserResources] Fallback profile created successfully:`, profile);
+      } else {
+        console.error(`[ensureUserResources] Critical: Fallback profile creation failed/returned null.`);
+      }
     } else {
-      workspace = data;
+      console.log(`[ensureUserResources] Profile verified:`, profile);
     }
-  } catch (err) {
-    console.error(`[ensureUserResources] Exception thrown when querying workspaces:`, err);
-  }
 
-  // Recovery logic: If missing workspace, automatically create one.
-  if (!workspace) {
-    console.log(`[ensureUserResources] Personal workspace is missing (workspace == null). Triggering automatic workspace creation...`);
+    // 2. Ensure Personal Workspace exists
+    let workspace: Workspace | null = null;
     try {
-      workspace = await createPersonalWorkspace(user.id);
-    } catch (createErr) {
-      console.error(`[ensureUserResources] Workspace creation failed. Stopping resource verification sequence.`, createErr);
-      return { profile, workspace: null };
-    }
-  } else {
-    console.log(`[ensureUserResources] Personal workspace verified:`, workspace);
-  }
-
-  // 3. Ensure Workspace Membership and categories are seeded
-  if (workspace) {
-    // Membership double check
-    try {
-      console.log(`[ensureUserResources] Verifying workspace membership row for workspace: ${workspace.id}, profile: ${user.id}`);
-      const { data: membership, error: memError } = await supabase
-        .from('workspace_members')
+      // Fix #2: Add Detailed Workspace Lookup Logging
+      console.log("Checking personal workspace...");
+      console.log(`[ensureUserResources] Querying workspaces for user: ${user.id}`);
+      const { data, error: wSelectError } = await supabase
+        .from('workspaces')
         .select('*')
-        .eq('workspace_id', workspace.id)
-        .eq('profile_id', user.id)
+        .eq('owner_id', user.id)
+        .eq('is_personal', true)
         .maybeSingle();
 
-      if (memError) {
-        console.error(`[ensureUserResources] Error verifying membership row:`, memError);
-      }
+      console.log("Workspace query result:", data);
+      console.log("Workspace query error:", wSelectError);
 
-      if (!membership) {
-        console.log(`[ensureUserResources] Workspace membership row missing. Inserting admin membership row now...`);
-        const { error: insertMemError } = await supabase
+      if (wSelectError) {
+        console.error(`[ensureUserResources] Error querying workspaces:`, wSelectError);
+        console.error(`[ensureUserResources] Workspace query details: code=${wSelectError.code}, message=${wSelectError.message}, details=${wSelectError.details}, hint=${wSelectError.hint}`);
+      } else {
+        workspace = data;
+      }
+    } catch (err) {
+      console.error(`[ensureUserResources] Exception thrown when querying workspaces:`, err);
+    }
+
+    // Fix #8: Diagnostic Logging
+    console.log("Workspace exists:", workspace?.id);
+
+    // Recovery logic: If missing workspace, automatically create one.
+    if (!workspace) {
+      console.log(`[ensureUserResources] Personal workspace is missing (workspace == null). Triggering automatic workspace creation...`);
+      try {
+        workspace = await createPersonalWorkspace(user.id);
+      } catch (createErr) {
+        console.error(`[ensureUserResources] Workspace creation failed. Stopping resource verification sequence.`, createErr);
+        return { profile, workspace: null };
+      }
+    } else {
+      console.log(`[ensureUserResources] Personal workspace verified:`, workspace);
+    }
+
+    // 3. Ensure Workspace Membership and categories are seeded
+    if (workspace) {
+      let membership: any = null;
+      // Membership double check
+      try {
+        console.log(`[ensureUserResources] Verifying workspace membership row for workspace: ${workspace.id}, profile: ${user.id}`);
+        const { data: memData, error: memError } = await supabase
           .from('workspace_members')
-          .insert({
-            workspace_id: workspace.id,
-            profile_id: user.id,
-            member_role: 'admin',
-            joined_at: new Date().toISOString()
-          });
+          .select('*')
+          .eq('workspace_id', workspace.id)
+          .eq('profile_id', user.id)
+          .maybeSingle();
 
-        if (insertMemError) {
-          console.error(`[ensureUserResources] Error inserting workspace membership row:`, insertMemError);
-        } else {
-          console.log(`[ensureUserResources] Workspace membership row inserted successfully.`);
+        if (memError) {
+          console.error(`[ensureUserResources] Error verifying membership row:`, memError);
         }
-      } else {
-        console.log(`[ensureUserResources] Workspace membership row verified:`, membership);
+        
+        membership = memData;
+
+        // Fix #8: Diagnostic Logging
+        console.log("Membership exists:", membership?.id);
+
+        if (!membership) {
+          console.log(`[ensureUserResources] Workspace membership row missing. Inserting admin membership row now...`);
+          const { data: newMem, error: insertMemError } = await supabase
+            .from('workspace_members')
+            .insert({
+              workspace_id: workspace.id,
+              profile_id: user.id,
+              member_role: 'admin',
+              joined_at: new Date().toISOString()
+            })
+            .select()
+            .maybeSingle();
+
+          if (insertMemError) {
+            console.error(`[ensureUserResources] Error inserting workspace membership row:`, insertMemError);
+          } else {
+            console.log(`[ensureUserResources] Workspace membership row inserted successfully.`);
+            membership = newMem;
+          }
+        } else {
+          console.log(`[ensureUserResources] Workspace membership row verified:`, membership);
+        }
+      } catch (memExc) {
+        console.error(`[ensureUserResources] Exception caught while verifying workspace membership:`, memExc);
       }
-    } catch (memExc) {
-      console.error(`[ensureUserResources] Exception caught while verifying workspace membership:`, memExc);
+
+      // Categories double check
+      try {
+        console.log(`[ensureUserResources] Checking category count for workspace: ${workspace.id}`);
+        const { data: categories, error: countError } = await supabase
+          .from('categories')
+          .select('id')
+          .eq('workspace_id', workspace.id);
+
+        if (countError) {
+          console.error(`[ensureUserResources] Error checking categories count:`, countError);
+        } else {
+          // Fix #8: Diagnostic Logging
+          console.log("Categories count:", categories?.length);
+        }
+
+        if (!countError && (!categories || categories.length === 0)) {
+          console.log(`[ensureUserResources] Categories count is 0. Triggering client-side categories seed...`);
+          const { seedDefaultCategories } = await import('@/lib/categories');
+          await seedDefaultCategories(workspace.id);
+          console.log(`[ensureUserResources] Client-side category seeding completed.`);
+        }
+      } catch (catExc) {
+        console.error(`[ensureUserResources] Exception caught while verifying categories count:`, catExc);
+      }
     }
 
-    // Categories double check
-    try {
-      console.log(`[ensureUserResources] Checking category count for workspace: ${workspace.id}`);
-      const { count, error: countError } = await supabase
-        .from('categories')
-        .select('*', { count: 'exact', head: true })
-        .eq('workspace_id', workspace.id);
-
-      if (countError) {
-        console.error(`[ensureUserResources] Error checking categories count:`, countError);
-      } else {
-        console.log(`[ensureUserResources] Verified categories count: ${count}`);
-      }
-
-      if (!countError && count === 0) {
-        console.log(`[ensureUserResources] Categories count is 0. Triggering client-side categories seed...`);
-        const { seedDefaultCategories } = await import('@/lib/categories');
-        await seedDefaultCategories(workspace.id);
-        console.log(`[ensureUserResources] Client-side category seeding completed.`);
-      }
-    } catch (catExc) {
-      console.error(`[ensureUserResources] Exception caught while verifying categories count:`, catExc);
-    }
+    console.log(`[ensureUserResources] Verification sequence complete for user: ${user.id}`);
+    return { profile, workspace };
+  } finally {
+    resourceInitializationRunning = false;
   }
-
-  console.log(`[ensureUserResources] Verification sequence complete for user: ${user.id}`);
-  return { profile, workspace };
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -297,19 +403,21 @@ export const useAuthStore = create<AuthState>()(
             throw sessionError;
           }
 
-          console.log("Auth State (Session):", session);
+          console.log("[initialize] Auth State (Session):", session);
           if (session?.user) {
             const user = session.user;
-            console.log("User details:", user);
-            set({ user });
+            console.log("[initialize] User details:", user);
+            // Always clear stale persisted workspace before running ensureUserResources
+            // to prevent stale workspace_id from a previous session or deleted workspace
+            set({ user, workspace: null });
 
             const { profile: profileData, workspace: workspaceData } = await ensureUserResources(user);
-            console.log("Profile details:", profileData);
+            console.log("[initialize] Profile details:", profileData);
 
             if (profileData) {
               const isVerified = !!user.email_confirmed_at;
               if (profileData.email_verified !== isVerified) {
-                console.log(`Syncing profile email_verified to ${isVerified} matching user session confirmation status.`);
+                console.log(`[initialize] Syncing profile email_verified to ${isVerified}.`);
                 await supabase
                   .from('profiles')
                   .update({
@@ -347,16 +455,35 @@ export const useAuthStore = create<AuthState>()(
               set({ profile: null });
             }
 
-            if (workspaceData) {
-              set({ workspace: workspaceData });
-            } else {
-              set({ workspace: null });
+            // Always overwrite workspace from fresh DB data — never trust persisted state
+            set({ workspace: workspaceData ?? null });
+
+            // Safety net: if ensureUserResources returned null workspace (e.g. lock was held
+            // by a concurrent SIGNED_IN handler), do a direct DB lookup as last resort.
+            if (!workspaceData) {
+              console.log('[initialize] Workspace still null after ensureUserResources — attempting direct fallback fetch.');
+              try {
+                const { data: fallbackWs } = await supabase
+                  .from('workspaces')
+                  .select('*')
+                  .eq('owner_id', user.id)
+                  .eq('is_personal', true)
+                  .maybeSingle();
+                if (fallbackWs) {
+                  console.log('[initialize] Fallback workspace fetch succeeded:', fallbackWs.id);
+                  set({ workspace: fallbackWs });
+                } else {
+                  console.warn('[initialize] Fallback workspace fetch returned null — workspace may not exist in DB.');
+                }
+              } catch (fbErr) {
+                console.error('[initialize] Fallback workspace fetch failed:', fbErr);
+              }
             }
           } else {
             set({ user: null, profile: null, workspace: null });
           }
         } catch (error) {
-          console.error('Auth initialization error:', error);
+          console.error('[initialize] Auth initialization error:', error);
           const { useUIStore } = await import('@/stores/uiStore');
           useUIStore.getState().addNotification({
             type: 'error',
@@ -457,18 +584,37 @@ export const useAuthStore = create<AuthState>()(
   )
 );
 
-supabase.auth.onAuthStateChange(async (event, session) => {
-  const { setUser, setProfile, setWorkspace } = useAuthStore.getState();
-  console.log(`onAuthStateChange event: ${event}, Session info:`, session);
+export async function handleAuthStateChange(event: string, session: any) {
+  console.log(`[handleAuthStateChange] event=${event}`);
 
-  if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user) {
+  // TOKEN_REFRESHED: Only update the user token in state.
+  // Do NOT re-run ensureUserResources — initialize() already handled setup.
+  if (event === 'TOKEN_REFRESHED' && session?.user) {
+    console.log('[handleAuthStateChange] TOKEN_REFRESHED: updating user token only (no resource re-init).');
+    useAuthStore.getState().setUser(session.user);
+    return;
+  }
+
+  if (event === 'SIGNED_IN' && session?.user) {
     const user = session.user;
+    const { isInitialized, setUser, setProfile, setWorkspace } = useAuthStore.getState();
     setUser(user);
-    console.log("User session details:", user);
+
+    // If initialize() already ran (isInitialized=true), resources are already set.
+    // Skip ensureUserResources to prevent double-initialization on app load.
+    if (isInitialized) {
+      console.log('[handleAuthStateChange] SIGNED_IN received but store already initialized — skipping ensureUserResources.');
+      return;
+    }
+
+    console.log('[handleAuthStateChange] SIGNED_IN: store not yet initialized — running ensureUserResources.');
     try {
       const { profile: profileData, workspace: workspaceData } = await ensureUserResources(user);
-      console.log("Profile info:", profileData);
 
+      // Guard: if ensureUserResources returned early due to the lock (initialize() running
+      // concurrently), both values will be whatever was in state (possibly null). Only
+      // update state if we actually got real data back — do NOT clobber what initialize()
+      // is about to set.
       if (profileData) {
         const isVerified = !!user.email_confirmed_at;
         if (profileData.email_verified !== isVerified) {
@@ -493,7 +639,7 @@ supabase.auth.onAuthStateChange(async (event, session) => {
           profileData.preferred_currency
         );
 
-        const mergedProfile = {
+        setProfile({
           ...profileData,
           phone_number: profileData.phone_number || user.user_metadata?.phone_number || null,
           city: profileData.city || user.user_metadata?.city || null,
@@ -503,19 +649,20 @@ supabase.auth.onAuthStateChange(async (event, session) => {
           preferred_currency: profileData.preferred_currency || 'INR',
           email_verified: isVerified,
           profile_completed: completed,
-        };
-        setProfile(mergedProfile);
+        });
       }
 
+      // Only overwrite workspace if we got a real workspace back
       if (workspaceData) {
         setWorkspace(workspaceData);
       }
     } catch (error) {
-      console.error('Error fetching profile after auth state change:', error);
+      console.error('[handleAuthStateChange] Error during ensureUserResources:', error);
     }
   } else if (event === 'SIGNED_OUT') {
+    const { setUser, setProfile, setWorkspace } = useAuthStore.getState();
     setUser(null);
     setProfile(null);
     setWorkspace(null);
   }
-});
+}

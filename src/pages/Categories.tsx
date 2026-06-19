@@ -69,6 +69,11 @@ export function CategoriesPage() {
   const [editingCategory, setEditingCategory] = React.useState<string | null>(null);
 
   const { data: categories, isLoading } = useCategories(workspaceId);
+
+  // Required Logging
+  console.log('Workspace:', workspace);
+  console.log('Workspace ID:', workspaceId);
+  console.log('Store Categories:', categories);
   const createCategory = useCreateCategory();
   const updateCategory = useUpdateCategory();
   const deleteCategory = useDeleteCategory();

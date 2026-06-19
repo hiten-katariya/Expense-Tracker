@@ -2,7 +2,8 @@ import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Lenis from 'lenis';
-import { useAuthStore } from '@/stores/authStore';
+import { useAuthStore, handleAuthStateChange } from '@/stores/authStore';
+import { supabase } from '@/lib/supabase';
 import { Layout } from '@/components/Layout';
 import { Toast } from '@/components/Modal';
 import { useUIStore } from '@/stores/uiStore';
@@ -97,6 +98,18 @@ function AppRoutes() {
       initialize();
     }
   }, [initialize, isInitialized]);
+
+  useEffect(() => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      handleAuthStateChange(event, session);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
 
   if (!isInitialized) {
     return (

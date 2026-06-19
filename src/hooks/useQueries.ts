@@ -5,14 +5,23 @@ export function useCategories(workspaceId: string | undefined) {
   return useQuery({
     queryKey: ['categories', workspaceId],
     queryFn: async () => {
-      if (!workspaceId) return [];
+      console.log('[useCategories] Workspace ID used in query:', workspaceId);
+      if (!workspaceId) {
+        console.log('[useCategories] No workspaceId — skipping fetch.');
+        return [];
+      }
       const { data, error } = await supabase
         .from('categories')
         .select('*')
         .eq('workspace_id', workspaceId)
         .order('sort_order', { ascending: true });
+      
+      console.log('[useCategories] Row count returned:', data?.length ?? 'null');
+      console.log('[useCategories] First row workspace_id:', data?.[0]?.workspace_id ?? 'n/a');
+      console.log('[useCategories] Error:', error);
+
       if (error) {
-        console.error("useCategories: Error querying categories:");
+        console.error("[useCategories] Error querying categories:");
         console.error("Code:", error.code);
         console.error("Message:", error.message);
         console.error("Details:", error.details);
@@ -22,6 +31,8 @@ export function useCategories(workspaceId: string | undefined) {
       return data as Category[];
     },
     enabled: !!workspaceId,
+    staleTime: 0,           // never serve stale data — always re-fetch when workspaceId changes
+    refetchOnMount: 'always', // re-fetch even if cache has data — catches stale [] from wrong workspaceId
   });
 }
 
@@ -165,12 +176,73 @@ export function useCreateExpense() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (expense: Partial<Expense>) => {
+      // Import/access store values dynamically
+      const { useAuthStore } = await import('@/stores/authStore');
+      const { user, workspace } = useAuthStore.getState();
+
+      let category = null;
+      if (expense.category_id) {
+        const { data: catData } = await supabase
+          .from('categories')
+          .select('*')
+          .eq('id', expense.category_id)
+          .maybeSingle();
+        category = catData;
+      }
+
+      // Add Safe Guards
+      if (!workspace?.id) {
+        throw new Error("Workspace missing");
+      }
+
+      if (!category?.id) {
+        throw new Error("Category missing");
+      }
+
+      if (!user?.id) {
+        throw new Error("User missing");
+      }
+
+      const payload = {
+        ...expense,
+        user_id: user.id,
+        workspace_id: workspace.id,
+      };
+
+      // Create Diagnostic Mode
+      console.log("Diagnostic Mode Info:", {
+        workspace,
+        category,
+        user,
+        payload
+      });
+
+      // Verify Expense Insert Payload Log
+      console.log("Expense Payload:", {
+        workspace_id: payload.workspace_id,
+        category_id: payload.category_id,
+        created_by: user.id,
+        amount: payload.amount,
+        title: payload.title,
+        description: payload.notes || null,
+        payment_method: payload.payment_method,
+        expense_date: payload.expense_date
+      });
+
       const { data, error } = await supabase
         .from('expenses')
-        .insert(expense)
+        .insert(payload)
         .select()
         .single();
-      if (error) throw error;
+
+      if (error) {
+        // Verify Database Response
+        console.error("useCreateExpense Error Code:", error.code);
+        console.error("useCreateExpense Error Message:", error.message);
+        console.error("useCreateExpense Error Details:", error.details);
+        console.error("useCreateExpense Error Hint:", error.hint);
+        throw error;
+      }
       return data;
     },
     onSuccess: (_, variables) => {
@@ -184,13 +256,74 @@ export function useUpdateExpense() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: Partial<Expense> }) => {
+      // Import/access store values dynamically
+      const { useAuthStore } = await import('@/stores/authStore');
+      const { user, workspace } = useAuthStore.getState();
+
+      let category = null;
+      if (updates.category_id) {
+        const { data: catData } = await supabase
+          .from('categories')
+          .select('*')
+          .eq('id', updates.category_id)
+          .maybeSingle();
+        category = catData;
+      }
+
+      // Add Safe Guards
+      if (!workspace?.id) {
+        throw new Error("Workspace missing");
+      }
+
+      if (!category?.id) {
+        throw new Error("Category missing");
+      }
+
+      if (!user?.id) {
+        throw new Error("User missing");
+      }
+
+      const payload = {
+        ...updates,
+        user_id: user.id,
+        workspace_id: workspace.id,
+      };
+
+      // Create Diagnostic Mode
+      console.log("Diagnostic Mode Info (Update):", {
+        workspace,
+        category,
+        user,
+        payload
+      });
+
+      // Verify Expense Update Payload Log
+      console.log("Expense Payload (Update):", {
+        workspace_id: payload.workspace_id,
+        category_id: payload.category_id,
+        created_by: user.id,
+        amount: payload.amount,
+        title: payload.title,
+        description: payload.notes || null,
+        payment_method: payload.payment_method,
+        expense_date: payload.expense_date
+      });
+
       const { data, error } = await supabase
         .from('expenses')
-        .update(updates)
+        .update(payload)
         .eq('id', id)
         .select()
         .single();
-      if (error) throw error;
+
+      if (error) {
+        // Verify Database Response
+        console.error("useUpdateExpense Error Code:", error.code);
+        console.error("useUpdateExpense Error Message:", error.message);
+        console.error("useUpdateExpense Error Details:", error.details);
+        console.error("useUpdateExpense Error Hint:", error.hint);
+        throw error;
+      }
       return data;
     },
     onSuccess: (data) => {
