@@ -10,6 +10,7 @@ import { useUIStore } from '@/stores/uiStore';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { CategoryIcon } from './Categories';
 import { Plus, Target, TriangleAlert as AlertTriangle } from 'lucide-react';
 
 const budgetSchema = z.object({
@@ -86,8 +87,8 @@ export function BudgetsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Budgets</h1>
-          <p className="text-slate-500">Set spending limits and track your progress</p>
+          <h1 className="text-2xl font-bold text-foreground">Budgets</h1>
+          <p className="text-foreground/60">Set spending limits and track your progress</p>
         </div>
         <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setIsModalOpen(true)}>
           Add Budget
@@ -106,27 +107,27 @@ export function BudgetsPage() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-3xl font-bold text-slate-900">{formatCurrency(overallSpent)}</p>
-                <p className="text-sm text-slate-500">spent this month</p>
+                <p className="text-3xl font-bold text-foreground">{formatCurrency(overallSpent)}</p>
+                <p className="text-sm text-foreground/60">spent this month</p>
               </div>
               <div className="text-right">
-                <p className="text-lg font-semibold text-slate-700">
+                <p className="text-lg font-semibold text-foreground/80">
                   {budgets?.find((b) => !b.category_id)?.amount
                     ? formatCurrency(budgets.find((b) => !b.category_id)?.amount || 0)
                     : 'No budget set'}
                 </p>
-                <p className="text-sm text-slate-500">monthly budget</p>
+                <p className="text-sm text-foreground/60">monthly budget</p>
               </div>
             </div>
             {budgets?.find((b) => !b.category_id) && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-500">Progress</span>
+                  <span className="text-foreground/60">Progress</span>
                   <span className="font-medium">
                     {getBudgetPercentage(overallSpent, budgets.find((b) => !b.category_id)?.amount || 1)}%
                   </span>
                 </div>
-                <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden">
+                <div className="h-3 w-full bg-foreground/10 rounded-full overflow-hidden">
                   <div
                     className={`h-full transition-all duration-500 rounded-full ${
                       getBudgetStatus(getBudgetPercentage(overallSpent, budgets.find((b) => !b.category_id)?.amount || 1)) === 'danger'
@@ -170,29 +171,35 @@ export function BudgetsPage() {
                   <CardContent className="p-4">
                     <div className="flex items-center gap-3 mb-4">
                       <div
-                        className="h-10 w-10 rounded-lg flex items-center justify-center text-xl"
+                        className="h-10 w-10 rounded-lg flex items-center justify-center text-white"
                         style={{ backgroundColor: budget.category?.color || '#95A5A6' }}
                       >
-                        {budget.category?.icon || '📦'}
+                        <CategoryIcon iconName={budget.category?.icon || 'Circle'} className="h-5 w-5" />
                       </div>
                       <div>
-                        <h3 className="font-semibold text-slate-900">{budget.category?.name || 'Category'}</h3>
-                        <p className="text-xs text-slate-500 capitalize">{budget.budget_type} budget</p>
+                        <h3 className="font-semibold text-foreground">
+                          {budget.category ? (
+                            budget.category.parent_id && categories
+                              ? `${categories.find((p) => p.id === budget.category!.parent_id)?.name || ''} › ${budget.category.name}`
+                              : budget.category.name
+                          ) : 'Category'}
+                        </h3>
+                        <p className="text-xs text-foreground/60 capitalize">{budget.budget_type} budget</p>
                       </div>
                     </div>
 
                     <div className="space-y-4">
                       <div className="flex items-center justify-between text-sm">
-                        <span className="text-slate-500">Spent</span>
+                        <span className="text-foreground/60">Spent</span>
                         <span className="font-medium">{formatCurrency(progress.spent)}</span>
                       </div>
 
                       <div className="space-y-1">
                         <div className="flex items-center justify-between text-xs">
-                          <span className="text-slate-500">{progress.percentage}% of budget</span>
-                          <span className="text-slate-500">{formatCurrency(budget.amount)}</span>
+                          <span className="text-foreground/60">{progress.percentage}% of budget</span>
+                          <span className="text-foreground/60">{formatCurrency(budget.amount)}</span>
                         </div>
-                        <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                        <div className="h-2 w-full bg-foreground/10 rounded-full overflow-hidden">
                           <div
                             className={`h-full transition-all duration-500 rounded-full ${
                               progress.status === 'danger'
@@ -207,7 +214,7 @@ export function BudgetsPage() {
                       </div>
 
                       {progress.percentage >= 80 && (
-                        <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 px-3 py-2 rounded-lg">
+                        <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-500/10 px-3 py-2 rounded-lg">
                           <AlertTriangle className="h-4 w-4" />
                           <span>
                             {progress.percentage >= 100
@@ -225,9 +232,9 @@ export function BudgetsPage() {
       ) : (
         <Card>
           <CardContent className="py-12 text-center">
-            <Target className="h-12 w-12 mx-auto text-slate-300 mb-4" />
-            <p className="text-slate-500">No category budgets set</p>
-            <p className="text-sm text-slate-400 mt-1">
+            <Target className="h-12 w-12 mx-auto text-foreground/30 mb-4" />
+            <p className="text-foreground/60">No category budgets set</p>
+            <p className="text-sm text-foreground/50 mt-1">
               Set category-specific budgets to track spending more effectively
             </p>
             <Button variant="ghost" className="mt-4" onClick={() => setIsModalOpen(true)}>
@@ -245,14 +252,18 @@ export function BudgetsPage() {
             type="number"
             step="0.01"
             placeholder="e.g., 10000"
-            leftIcon={<span className="text-slate-400">₹</span>}
+            leftIcon={<span className="text-foreground/45">₹</span>}
             error={errors.amount?.message}
             {...register('amount', { valueAsNumber: true })}
           />
 
           <Select
             label="Category (leave empty for overall budget)"
-            options={categories?.filter((c) => c.id).map((c) => ({ value: c.id, label: `${c.icon} ${c.name}` })) || []}
+            options={categories?.filter((c) => c.id).map((c) => {
+              const parent = c.parent_id ? categories.find((p) => p.id === c.parent_id) : null;
+              const label = parent ? `${parent.name} › ${c.name}` : c.name;
+              return { value: c.id, label };
+            }) || []}
             placeholder="All categories (overall budget)"
             {...register('category_id')}
           />

@@ -12,6 +12,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { supabase } from '@/lib/supabase';
 import { Plus, Users, Copy, Check, Mail, Send, UserPlus } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 const familySchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -112,8 +113,8 @@ export function FamilyPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Family</h1>
-          <p className="text-slate-500">Manage family groups and shared expenses</p>
+          <h1 className="text-2xl font-bold text-foreground">Family</h1>
+          <p className="text-foreground/60">Manage family groups and shared expenses</p>
         </div>
         {!currentFamily && (
           <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setIsCreateModalOpen(true)}>
@@ -141,9 +142,9 @@ export function FamilyPage() {
                 {currentFamily.name}
               </CardTitle>
               <div className="flex items-center gap-2">
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg">
-                  <span className="text-xs text-slate-500">Invite code:</span>
-                  <span className="text-sm font-mono font-medium text-slate-700">
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-foreground/5 rounded-lg">
+                  <span className="text-xs text-foreground/60">Invite code:</span>
+                  <span className="text-sm font-mono font-medium text-foreground/80">
                     {currentFamily.invite_code}
                   </span>
                   <IconButton size="sm" onClick={() => copyInviteCode(currentFamily.invite_code || '')}>
@@ -155,18 +156,18 @@ export function FamilyPage() {
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div>
-                  <p className="text-sm text-slate-500">Monthly Budget</p>
-                  <p className="text-2xl font-bold text-slate-900">
+                  <p className="text-sm text-foreground/60">Monthly Budget</p>
+                  <p className="text-2xl font-bold text-foreground">
                     {currentFamily.monthly_budget ? formatCurrency(currentFamily.monthly_budget) : 'Not set'}
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm text-slate-500">Family Members</p>
-                  <p className="text-2xl font-bold text-slate-900">{members?.length || 1}</p>
+                  <p className="text-sm text-foreground/60">Family Members</p>
+                  <p className="text-2xl font-bold text-foreground">{members?.length || 1}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-slate-500">Created</p>
-                  <p className="text-lg font-semibold text-slate-700">
+                  <p className="text-sm text-foreground/60">Created</p>
+                  <p className="text-lg font-semibold text-foreground/85">
                     {formatDate(currentFamily.created_at)}
                   </p>
                 </div>
@@ -192,37 +193,45 @@ export function FamilyPage() {
                 <div className="p-6">
                   <div className="animate-pulse space-y-3">
                     {[...Array(3)].map((_, i) => (
-                      <div key={i} className="h-12 bg-slate-200 rounded" />
+                      <div key={i} className="h-12 bg-foreground/10 rounded" />
                     ))}
                   </div>
                 </div>
               ) : members && members.length > 0 ? (
-                <div className="divide-y divide-slate-100">
+                <div className="divide-y divide-foreground/5">
                   {members.map((member) => (
                     <div key={member.id} className="flex items-center gap-4 px-6 py-4">
-                      <div className="h-10 w-10 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-semibold">
-                        {member.profile?.full_name?.charAt(0).toUpperCase() || member.profile?.email?.charAt(0).toUpperCase()}
-                      </div>
+                      {member.profile_id === user?.id ? (
+                        <Link to="/settings" className="h-10 w-10 rounded-full bg-primary-500/10 hover:bg-primary-500/20 flex items-center justify-center text-primary-500 font-semibold transition-all hover:scale-105 shadow-sm block">
+                          <span className="flex items-center justify-center h-full w-full">
+                            {member.profile?.full_name?.charAt(0).toUpperCase() || member.profile?.email?.charAt(0).toUpperCase()}
+                          </span>
+                        </Link>
+                      ) : (
+                        <div className="h-10 w-10 rounded-full bg-primary-500/10 flex items-center justify-center text-primary-500 font-semibold">
+                          {member.profile?.full_name?.charAt(0).toUpperCase() || member.profile?.email?.charAt(0).toUpperCase()}
+                        </div>
+                      )}
                       <div className="flex-1">
-                        <p className="text-sm font-medium text-slate-900">
+                        <p className="text-sm font-medium text-foreground">
                           {member.profile?.full_name || 'Unknown'}
                           {member.profile_id === user?.id && (
-                            <span className="ml-2 text-xs text-primary-600">(You)</span>
+                            <span className="ml-2 text-xs text-primary-500">(You)</span>
                           )}
                         </p>
-                        <p className="text-xs text-slate-500">{member.profile?.email}</p>
+                        <p className="text-xs text-foreground/60">{member.profile?.email}</p>
                       </div>
                       <div className="flex items-center gap-2">
                         <span
                           className={`text-xs px-2 py-0.5 rounded-full ${
                             member.member_role === 'admin'
-                              ? 'bg-primary-100 text-primary-700'
-                              : 'bg-slate-100 text-slate-600'
+                              ? 'bg-primary-500/10 text-primary-600 dark:text-primary-400'
+                              : 'bg-foreground/5 text-foreground/80'
                           }`}
                         >
                           {member.member_role}
                         </span>
-                        <span className="text-xs text-slate-400">
+                        <span className="text-xs text-foreground/50">
                           Joined {formatDate(member.joined_at, 'short')}
                         </span>
                       </div>
@@ -230,7 +239,7 @@ export function FamilyPage() {
                   ))}
                 </div>
               ) : (
-                <div className="py-12 text-center text-slate-500">
+                <div className="py-12 text-center text-foreground/60">
                   No members found
                 </div>
               )}
@@ -243,7 +252,7 @@ export function FamilyPage() {
               <CardTitle className="text-base">Pending Invites</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="py-8 text-center text-slate-500">
+              <div className="py-8 text-center text-foreground/60">
                 <Mail className="h-12 w-12 mx-auto mb-4 opacity-50" />
                 <p>No pending invites</p>
                 <Button
@@ -261,9 +270,9 @@ export function FamilyPage() {
       ) : (
         <Card>
           <CardContent className="py-16 text-center">
-            <Users className="h-16 w-16 mx-auto text-slate-300 mb-4" />
-            <p className="text-lg text-slate-700">No family group yet</p>
-            <p className="text-sm text-slate-500 mt-1 mb-6">
+            <Users className="h-16 w-16 mx-auto text-foreground/30 mb-4" />
+            <p className="text-lg text-foreground/85">No family group yet</p>
+            <p className="text-sm text-foreground/60 mt-1 mb-6">
               Create a family group to share expenses with your loved ones
             </p>
             <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setIsCreateModalOpen(true)}>
@@ -292,7 +301,7 @@ export function FamilyPage() {
             type="number"
             step="0.01"
             placeholder="e.g., 50000"
-            leftIcon={<span className="text-slate-400">₹</span>}
+            leftIcon={<span className="text-foreground/45">₹</span>}
             {...familyForm.register('monthly_budget', { valueAsNumber: true })}
           />
           <div className="flex items-center gap-3 pt-4">
@@ -322,7 +331,7 @@ export function FamilyPage() {
             leftIcon={<Mail className="h-4 w-4" />}
             {...inviteForm.register('email')}
           />
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-foreground/60">
             The invite will expire in 7 days. They can also join using the invite code: <strong>{currentFamily?.invite_code}</strong>
           </p>
           <div className="flex items-center gap-3 pt-4">

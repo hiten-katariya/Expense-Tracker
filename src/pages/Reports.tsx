@@ -24,6 +24,7 @@ const COLORS = ['#E74C3C', '#3498DB', '#9B59B6', '#27AE60', '#E67E22', '#1ABC9C'
 
 export function ReportsPage() {
   const { workspace } = useAuthStore();
+  const { darkMode } = useUIStore();
   const workspaceId = workspace?.id;
   const addNotification = useUIStore((s) => s.addNotification);
 
@@ -100,13 +101,13 @@ export function ReportsPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Reports</h1>
-          <p className="text-slate-500">Analyze your spending patterns</p>
+          <h1 className="text-2xl font-bold text-foreground">Reports</h1>
+          <p className="text-foreground/60">Analyze your spending patterns</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             <select
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+              className="rounded-lg border border-foreground/10 bg-card text-foreground px-3 py-2 text-sm"
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(parseInt(e.target.value, 10))}
             >
@@ -115,7 +116,7 @@ export function ReportsPage() {
               ))}
             </select>
             <select
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+              className="rounded-lg border border-foreground/10 bg-card text-foreground px-3 py-2 text-sm"
               value={selectedYear}
               onChange={(e) => setSelectedYear(parseInt(e.target.value, 10))}
             >
@@ -150,12 +151,12 @@ export function ReportsPage() {
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-lg bg-primary-100 flex items-center justify-center">
-                    <Calendar className="h-5 w-5 text-primary-600" />
+                  <div className="h-10 w-10 rounded-lg bg-primary-500/10 flex items-center justify-center">
+                    <Calendar className="h-5 w-5 text-primary-500" />
                   </div>
                   <div>
-                    <p className="text-sm text-slate-500">Total Spent</p>
-                    <p className="text-xl font-bold text-slate-900">
+                    <p className="text-sm text-foreground/60">Total Spent</p>
+                    <p className="text-xl font-bold text-foreground">
                       {formatCurrency(summary?.total_spent || 0)}
                     </p>
                   </div>
@@ -166,12 +167,12 @@ export function ReportsPage() {
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-lg bg-green-100 flex items-center justify-center">
-                    <TrendingUp className="h-5 w-5 text-green-600" />
+                  <div className="h-10 w-10 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                    <TrendingUp className="h-5 w-5 text-emerald-500" />
                   </div>
                   <div>
-                    <p className="text-sm text-slate-500">Daily Average</p>
-                    <p className="text-xl font-bold text-slate-900">
+                    <p className="text-sm text-foreground/60">Daily Average</p>
+                    <p className="text-xl font-bold text-foreground">
                       {formatCurrency(summary?.daily_average || 0)}
                     </p>
                   </div>
@@ -182,12 +183,12 @@ export function ReportsPage() {
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-lg bg-amber-100 flex items-center justify-center">
-                    <TrendingDown className="h-5 w-5 text-amber-600" />
+                  <div className="h-10 w-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                    <TrendingDown className="h-5 w-5 text-amber-500" />
                   </div>
                   <div>
-                    <p className="text-sm text-slate-500">Projected</p>
-                    <p className="text-xl font-bold text-slate-900">
+                    <p className="text-sm text-foreground/60">Projected</p>
+                    <p className="text-xl font-bold text-foreground">
                       {formatCurrency(summary?.projected_total || 0)}
                     </p>
                   </div>
@@ -198,12 +199,12 @@ export function ReportsPage() {
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-lg bg-purple-100 flex items-center justify-center">
-                    <AlertCircle className="h-5 w-5 text-purple-600" />
+                  <div className="h-10 w-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                    <AlertCircle className="h-5 w-5 text-purple-500" />
                   </div>
                   <div>
-                    <p className="text-sm text-slate-500">Categories</p>
-                    <p className="text-xl font-bold text-slate-900">
+                    <p className="text-sm text-foreground/60">Categories</p>
+                    <p className="text-xl font-bold text-foreground">
                       {summary?.category_breakdown.length || 0}
                     </p>
                   </div>
@@ -223,16 +224,16 @@ export function ReportsPage() {
                 <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={dailyData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                      <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="text-foreground/10" />
                       <XAxis
                         dataKey="day"
-                        tick={{ fontSize: 10 }}
+                        tick={{ fontSize: 10, fill: darkMode ? '#94a3b8' : '#64748b' }}
                         tickLine={false}
                         axisLine={false}
                       />
                       <YAxis
                         tickFormatter={(v) => `₹${v}`}
-                        tick={{ fontSize: 10 }}
+                        tick={{ fontSize: 10, fill: darkMode ? '#94a3b8' : '#64748b' }}
                         tickLine={false}
                         axisLine={false}
                       />
@@ -242,7 +243,9 @@ export function ReportsPage() {
                         contentStyle={{
                           borderRadius: '8px',
                           border: 'none',
-                          boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
+                          boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.15)',
+                          background: darkMode ? '#1e293b' : '#ffffff',
+                          color: darkMode ? '#ffffff' : '#1e293b',
                         }}
                       />
                       <Bar dataKey="amount" fill="#4A90D9" radius={[4, 4, 0, 0]} />
@@ -280,7 +283,9 @@ export function ReportsPage() {
                           contentStyle={{
                             borderRadius: '8px',
                             border: 'none',
-                            boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
+                            boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.15)',
+                            background: darkMode ? '#1e293b' : '#ffffff',
+                            color: darkMode ? '#ffffff' : '#1e293b',
                           }}
                         />
                         <Legend />
@@ -288,7 +293,7 @@ export function ReportsPage() {
                     </ResponsiveContainer>
                   </div>
                 ) : (
-                  <div className="h-64 flex items-center justify-center text-slate-500">
+                  <div className="h-64 flex items-center justify-center text-foreground/60">
                     <div className="text-center">
                       <AlertCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
                       <p>No expenses for {months[selectedMonth]} {selectedYear}</p>
@@ -306,7 +311,7 @@ export function ReportsPage() {
             </CardHeader>
             <CardContent className="p-0">
               {summary?.category_breakdown && summary.category_breakdown.length > 0 ? (
-                <div className="divide-y divide-slate-100">
+                <div className="divide-y divide-foreground/5">
                   {summary.category_breakdown.map((cat) => (
                     <div key={cat.category_id} className="flex items-center gap-4 px-6 py-4">
                       <div
@@ -316,18 +321,18 @@ export function ReportsPage() {
                         {cat.category_icon || '📦'}
                       </div>
                       <div className="flex-1">
-                        <p className="text-sm font-medium text-slate-900">{cat.category_name}</p>
-                        <p className="text-xs text-slate-500">{cat.count} transactions</p>
+                        <p className="text-sm font-medium text-foreground">{cat.category_name}</p>
+                        <p className="text-xs text-foreground/60">{cat.count} transactions</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-sm font-semibold text-slate-900">{formatCurrency(cat.total)}</p>
-                        <p className="text-xs text-slate-500">{cat.percentage.toFixed(1)}%</p>
+                        <p className="text-sm font-semibold text-foreground">{formatCurrency(cat.total)}</p>
+                        <p className="text-xs text-foreground/60">{cat.percentage.toFixed(1)}%</p>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="py-12 text-center text-slate-500">
+                <div className="py-12 text-center text-foreground/60">
                   No expense data available for this period
                 </div>
               )}

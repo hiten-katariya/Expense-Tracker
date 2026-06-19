@@ -9,6 +9,14 @@ export interface Profile {
   email_verified_at: string | null;
   created_at: string;
   updated_at: string;
+  phone_number?: string | null;
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
+  pincode?: string | null;
+  preferred_currency?: string;
+  email_verified?: boolean;
+  profile_completed?: boolean;
 }
 
 export interface Workspace {

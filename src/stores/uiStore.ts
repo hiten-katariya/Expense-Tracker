@@ -33,13 +33,23 @@ interface UIState {
   setCurrentPage: (page: number) => void;
 }
 
+const initialDarkMode = (() => {
+  const theme = localStorage.getItem('theme');
+  if (theme) return theme === 'dark';
+  return !window.matchMedia('(prefers-color-scheme: light)').matches;
+})();
+
+if (typeof document !== 'undefined') {
+  document.documentElement.classList.toggle('dark', initialDarkMode);
+}
+
 export const useUIStore = create<UIState>((set) => ({
   sidebarOpen: true,
   mobileMenuOpen: false,
   addExpenseDrawerOpen: false,
   expenseToEdit: null,
   settingsOpen: false,
-  darkMode: false,
+  darkMode: initialDarkMode,
   notifications: [],
   filters: {},
   sortConfig: { field: 'expense_date', direction: 'desc' },
@@ -52,11 +62,10 @@ export const useUIStore = create<UIState>((set) => ({
   setSettingsOpen: (open) => set({ settingsOpen: open }),
   toggleDarkMode: () => set((state) => {
     const newDarkMode = !state.darkMode;
-    if (newDarkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
+    if (typeof document !== 'undefined') {
+      document.documentElement.classList.toggle('dark', newDarkMode);
     }
+    localStorage.setItem('theme', newDarkMode ? 'dark' : 'light');
     return { darkMode: newDarkMode };
   }),
 

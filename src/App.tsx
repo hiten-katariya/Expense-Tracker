@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import Lenis from 'lenis';
 import { useAuthStore } from '@/stores/authStore';
 import { Layout } from '@/components/Layout';
 import { Toast } from '@/components/Modal';
@@ -16,6 +17,8 @@ import { BudgetsPage } from '@/pages/Budgets';
 import { ReportsPage } from '@/pages/Reports';
 import { FamilyPage } from '@/pages/Family';
 import { SettingsPage } from '@/pages/Settings';
+import OnboardingPage from '@/pages/Onboarding';
+import VerifyEmailPage from '@/pages/VerifyEmail';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -26,15 +29,16 @@ const queryClient = new QueryClient({
   },
 });
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
+function RequireAuthOnly({ children }: { children: React.ReactNode }) {
   const { user, isInitialized } = useAuthStore();
 
   if (!isInitialized) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="h-10 w-10 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-slate-600">Loading...</p>
+      <div className="min-h-screen bg-background flex items-center justify-center relative overflow-hidden">
+        <div className="absolute inset-0 grid-bg opacity-[0.05] pointer-events-none" />
+        <div className="text-center relative z-10">
+          <div className="h-12 w-12 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4 shadow-[0_0_15px_rgba(99,102,241,0.25)]" />
+          <p className="text-foreground/65 font-semibold tracking-wide">Initializing session...</p>
         </div>
       </div>
     );
@@ -42,6 +46,44 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  return <>{children}</>;
+}
+
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { user, profile, isInitialized } = useAuthStore();
+
+  if (!isInitialized) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center relative overflow-hidden">
+        <div className="absolute inset-0 grid-bg opacity-[0.05] pointer-events-none" />
+        <div className="text-center relative z-10">
+          <div className="h-12 w-12 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4 shadow-[0_0_15px_rgba(99,102,241,0.25)]" />
+          <p className="text-foreground/65 font-semibold tracking-wide">Initializing session...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/" replace />;
+  }
+
+  const isEmailVerified = !!user?.email_confirmed_at;
+  const isProfileComplete = !!(
+    profile &&
+    profile.full_name &&
+    profile.phone_number &&
+    profile.city &&
+    profile.state &&
+    profile.country &&
+    profile.pincode &&
+    profile.preferred_currency
+  );
+
+  if (!isEmailVerified || !isProfileComplete) {
+    return <Navigate to="/onboarding" replace />;
   }
 
   return <>{children}</>;
@@ -58,10 +100,11 @@ function AppRoutes() {
 
   if (!isInitialized) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="h-10 w-10 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-slate-600">Loading...</p>
+      <div className="min-h-screen bg-background flex items-center justify-center relative overflow-hidden">
+        <div className="absolute inset-0 grid-bg opacity-[0.05] pointer-events-none" />
+        <div className="text-center relative z-10">
+          <div className="h-12 w-12 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4 shadow-[0_0_15px_rgba(99,102,241,0.25)]" />
+          <p className="text-foreground/65 font-semibold tracking-wide">Loading Expense Tracker...</p>
         </div>
       </div>
     );
@@ -70,9 +113,20 @@ function AppRoutes() {
   return (
     <Routes>
       {/* Public Routes */}
-      <Route path="/" element={<HomePage />} />
+      <Route path="/" element={user ? <Navigate to="/dashboard" replace /> : <HomePage />} />
       <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
       <Route path="/register" element={user ? <Navigate to="/dashboard" replace /> : <RegisterPage />} />
+      <Route path="/verify-email" element={<VerifyEmailPage />} />
+
+      {/* Onboarding Route */}
+      <Route
+        path="/onboarding"
+        element={
+          <RequireAuthOnly>
+            <OnboardingPage />
+          </RequireAuthOnly>
+        }
+      />
 
       {/* Protected Routes */}
       <Route
@@ -197,6 +251,29 @@ function ToastContainer() {
 }
 
 export default function App() {
+  useEffect(() => {
+    const lenis = new Lenis({
+      duration: 1.2,
+      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+      orientation: 'vertical',
+      gestureOrientation: 'vertical',
+      smoothWheel: true,
+    });
+
+    let rafId: number;
+    function raf(time: number) {
+      lenis.raf(time);
+      rafId = requestAnimationFrame(raf);
+    }
+
+    rafId = requestAnimationFrame(raf);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      lenis.destroy();
+    };
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>

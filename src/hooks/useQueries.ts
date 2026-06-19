@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import type { Expense, Category, Family, FamilyMember, Budget, Notification } from '@/types';
-
 export function useCategories(workspaceId: string | undefined) {
   return useQuery({
     queryKey: ['categories', workspaceId],
@@ -12,7 +11,14 @@ export function useCategories(workspaceId: string | undefined) {
         .select('*')
         .eq('workspace_id', workspaceId)
         .order('sort_order', { ascending: true });
-      if (error) throw error;
+      if (error) {
+        console.error("useCategories: Error querying categories:");
+        console.error("Code:", error.code);
+        console.error("Message:", error.message);
+        console.error("Details:", error.details);
+        console.error("Hint:", error.hint);
+        throw error;
+      }
       return data as Category[];
     },
     enabled: !!workspaceId,
@@ -28,7 +34,14 @@ export function useCreateCategory() {
         .insert(category)
         .select()
         .single();
-      if (error) throw error;
+      if (error) {
+        console.error("useCreateCategory: Error inserting category:");
+        console.error("Code:", error.code);
+        console.error("Message:", error.message);
+        console.error("Details:", error.details);
+        console.error("Hint:", error.hint);
+        throw error;
+      }
       return data;
     },
     onSuccess: (_, variables) => {
@@ -47,7 +60,14 @@ export function useUpdateCategory() {
         .eq('id', id)
         .select()
         .single();
-      if (error) throw error;
+      if (error) {
+        console.error("useUpdateCategory: Error updating category:");
+        console.error("Code:", error.code);
+        console.error("Message:", error.message);
+        console.error("Details:", error.details);
+        console.error("Hint:", error.hint);
+        throw error;
+      }
       return data;
     },
     onSuccess: (data) => {
@@ -64,7 +84,14 @@ export function useDeleteCategory() {
         .from('categories')
         .delete()
         .eq('id', id);
-      if (error) throw error;
+      if (error) {
+        console.error("useDeleteCategory: Error deleting category:");
+        console.error("Code:", error.code);
+        console.error("Message:", error.message);
+        console.error("Details:", error.details);
+        console.error("Hint:", error.hint);
+        throw error;
+      }
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['categories', variables.workspaceId] });

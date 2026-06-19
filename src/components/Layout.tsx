@@ -1,8 +1,10 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, Link } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
-import { LayoutDashboard, Receipt, FolderOpen, Target, ChartPie as PieChart, Settings, Users, LogOut, Menu, X, Bell, Search } from 'lucide-react';
+import { useUIStore } from '@/stores/uiStore';
+import { LayoutDashboard, Receipt, FolderOpen, Target, ChartPie as PieChart, Settings, Users, LogOut, Menu, X, Bell, Search, Sun, Moon } from 'lucide-react';
 import { IconButton } from './Button';
 
 const navItems = [
@@ -16,186 +18,308 @@ const navItems = [
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { profile, signOut } = useAuthStore();
+  const { darkMode, toggleDarkMode } = useUIStore();
   const [sidebarOpen, setSidebarOpen] = React.useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-background text-foreground flex flex-col lg:flex-row relative">
+      {/* Background Mesh Gradients */}
+      <div className="fixed inset-0 grid-bg opacity-10 dark:opacity-30 pointer-events-none z-0" />
+      <div className="fixed -top-40 -left-40 h-[600px] w-[600px] rounded-full bg-primary-500/5 blur-3xl pointer-events-none z-0 animate-pulse-slow" />
+      <div className="fixed bottom-0 right-0 h-[600px] w-[600px] rounded-full bg-secondary-500/5 blur-3xl pointer-events-none z-0 animate-pulse-slow" />
+
       {/* Desktop Sidebar */}
-      <aside
-        className={cn(
-          'fixed left-0 top-0 h-screen bg-primary-600 text-white transition-all duration-300 z-30 hidden lg:block',
-          sidebarOpen ? 'w-64' : 'w-20'
-        )}
+      <motion.aside
+        animate={{ width: sidebarOpen ? 256 : 80 }}
+        transition={{ duration: 0.3, ease: 'easeInOut' }}
+        className="fixed left-0 top-0 h-screen bg-card/50 backdrop-blur-xl border-r border-foreground/10 transition-all z-30 hidden lg:flex flex-col select-none"
       >
-        {/* Logo */}
-        <div className="h-16 flex items-center justify-between px-4 border-b border-white/10">
-          {sidebarOpen && (
-            <span className="text-xl font-bold">Expense Tracker</span>
-          )}
+        {/* Logo Section */}
+        <div className="h-16 flex items-center justify-between px-4 border-b border-foreground/5 flex-shrink-0">
+          <AnimatePresence mode="wait">
+            {sidebarOpen ? (
+              <motion.span
+                key="expanded-title"
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -10 }}
+                className="text-lg font-bold bg-gradient-to-r from-primary-600 to-secondary-600 dark:from-primary-400 dark:to-secondary-500 bg-clip-text text-transparent tracking-tight"
+              >
+                Expense Tracker
+              </motion.span>
+            ) : (
+              <motion.span
+                key="collapsed-logo"
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                className="text-lg font-black bg-gradient-to-r from-primary-600 to-secondary-600 dark:from-primary-400 dark:to-secondary-500 bg-clip-text text-transparent px-2"
+              >
+                ET
+              </motion.span>
+            )}
+          </AnimatePresence>
           <IconButton
             onClick={() => setSidebarOpen(!sidebarOpen)}
             variant="ghost"
-            className="text-white hover:bg-white/10"
+            className="text-foreground/60 hover:text-foreground hover:bg-foreground/5"
           >
             <Menu className="h-5 w-5" />
           </IconButton>
         </div>
 
-        {/* Navigation */}
-        <nav className="p-4 space-y-1">
+        {/* Navigation Items */}
+        <nav className="p-4 space-y-2 flex-1 overflow-y-auto scrollbar-thin">
           {navItems.map((item) => (
             <NavLink
               key={item.path}
               to={item.path}
-              className={({ isActive }: { isActive: boolean }) =>
-                cn(
-                  'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
-                  isActive
-                    ? 'bg-white/20 text-white'
-                    : 'text-white/70 hover:bg-white/10 hover:text-white'
-                )
-              }
+              className="relative flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium transition-colors duration-300 group outline-none"
             >
-              <item.icon className="h-5 w-5 flex-shrink-0" />
-              {sidebarOpen && <span>{item.label}</span>}
+              {({ isActive }: { isActive: boolean }) => (
+                <>
+                  {/* Sliding capsule indicator */}
+                  {isActive && (
+                    <motion.div
+                      layoutId="activeTab"
+                      transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                      className="absolute inset-0 bg-primary-500/10 border border-primary-500/20 rounded-xl z-0"
+                    />
+                  )}
+                  <item.icon className={cn(
+                    "h-5 w-5 flex-shrink-0 z-10 transition-colors duration-300",
+                    isActive ? "text-primary-600 dark:text-primary-400" : "text-foreground/50 group-hover:text-foreground"
+                  )} />
+                  <AnimatePresence>
+                    {sidebarOpen && (
+                      <motion.span
+                        initial={{ opacity: 0, x: -5 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -5 }}
+                        className={cn(
+                          "z-10 transition-colors duration-300",
+                          isActive ? "text-primary-600 dark:text-white font-semibold" : "text-foreground/60 group-hover:text-foreground"
+                        )}
+                      >
+                        {item.label}
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </>
+              )}
             </NavLink>
           ))}
         </nav>
 
-        {/* User Section */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-white/10">
+        {/* User Settings and Sign Out */}
+        <div className="p-4 border-t border-foreground/5 bg-foreground/[0.01] flex-shrink-0">
           <NavLink
             to="/settings"
-            className={({ isActive }: { isActive: boolean }) =>
-              cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
-                isActive
-                  ? 'bg-white/20 text-white'
-                  : 'text-white/70 hover:bg-white/10 hover:text-white'
-              )
-            }
+            className="relative flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium transition-colors duration-300 group outline-none"
           >
-            <Settings className="h-5 w-5 flex-shrink-0" />
-            {sidebarOpen && <span>Settings</span>}
+            {({ isActive }: { isActive: boolean }) => (
+              <>
+                {isActive && (
+                  <motion.div
+                    layoutId="activeTab"
+                    transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                    className="absolute inset-0 bg-primary-500/10 border border-primary-500/20 rounded-xl z-0"
+                  />
+                )}
+                <Settings className={cn(
+                  "h-5 w-5 flex-shrink-0 z-10 transition-colors duration-300",
+                  isActive ? "text-primary-600 dark:text-primary-400" : "text-foreground/50 group-hover:text-foreground"
+                )} />
+                {sidebarOpen && (
+                  <span className={cn(
+                    "z-10 transition-colors duration-300",
+                    isActive ? "text-primary-600 dark:text-white font-semibold" : "text-foreground/60 group-hover:text-foreground"
+                  )}>
+                    Settings
+                  </span>
+                )}
+              </>
+            )}
           </NavLink>
           <button
             onClick={() => signOut()}
-            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-white/70 hover:bg-white/10 hover:text-white w-full mt-1 transition-all duration-200"
+            className="flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-foreground/60 hover:bg-foreground/5 hover:text-foreground w-full mt-2 transition-all duration-300 group outline-none"
           >
-            <LogOut className="h-5 w-5 flex-shrink-0" />
-            {sidebarOpen && <span>Sign Out</span>}
+            <LogOut className="h-5 w-5 flex-shrink-0 text-foreground/50 group-hover:text-red-500 transition-colors duration-300" />
+            {sidebarOpen && <span className="group-hover:text-foreground">Sign Out</span>}
           </button>
         </div>
-      </aside>
+      </motion.aside>
 
       {/* Mobile Header */}
-      <header className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 z-30">
-        <IconButton onClick={() => setMobileMenuOpen(true)}>
+      <header className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-card/85 backdrop-blur-xl border-b border-foreground/10 dark:border-white/5 flex items-center justify-between px-4 z-30 select-none">
+        <IconButton onClick={() => setMobileMenuOpen(true)} className="text-foreground/80">
           <Menu className="h-5 w-5" />
         </IconButton>
-        <span className="text-lg font-bold text-primary-600">Expense Tracker</span>
+        <span className="text-md font-bold bg-gradient-to-r from-primary-600 to-secondary-600 dark:from-primary-400 dark:to-secondary-500 bg-clip-text text-transparent">
+          Expense Tracker
+        </span>
         <div className="flex items-center gap-2">
-          <IconButton>
+          <IconButton 
+            onClick={toggleDarkMode}
+            className="text-foreground/60 hover:text-foreground hover:bg-foreground/5 p-2 rounded-xl"
+          >
+            {darkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+          </IconButton>
+          <IconButton className="text-foreground/80">
             <Bell className="h-5 w-5" />
           </IconButton>
+          <Link to="/settings" className="h-8 w-8 block rounded-xl bg-gradient-to-tr from-primary-500 to-secondary-500 p-[1.5px] shadow-[0_0_10px_rgba(99,102,241,0.2)] hover:shadow-[0_0_15px_rgba(99,102,241,0.3)] transition-all duration-300 cursor-pointer">
+            <div className="h-full w-full rounded-[9px] bg-card flex items-center justify-center text-foreground font-extrabold text-xs border border-foreground/10">
+              {profile?.full_name?.charAt(0).toUpperCase() || profile?.email?.charAt(0).toUpperCase()}
+            </div>
+          </Link>
         </div>
       </header>
 
-      {/* Mobile Sidebar */}
-      {mobileMenuOpen && (
-        <>
-          <div
-            className="lg:hidden fixed inset-0 bg-black/50 z-40"
-            onClick={() => setMobileMenuOpen(false)}
-          />
-          <aside className="lg:hidden fixed left-0 top-0 h-screen w-64 bg-primary-600 text-white z-50">
-            <div className="h-16 flex items-center justify-between px-4 border-b border-white/10">
-              <span className="text-xl font-bold">Expense Tracker</span>
-              <IconButton
-                onClick={() => setMobileMenuOpen(false)}
-                variant="ghost"
-                className="text-white hover:bg-white/10"
-              >
-                <X className="h-5 w-5" />
-              </IconButton>
-            </div>
-            <nav className="p-4 space-y-1">
-              {navItems.map((item) => (
+      {/* Mobile Drawer Navigation */}
+      <AnimatePresence>
+        {mobileMenuOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.5 }}
+              exit={{ opacity: 0 }}
+              className="lg:hidden fixed inset-0 bg-black z-40"
+              onClick={() => setMobileMenuOpen(false)}
+            />
+            <motion.aside
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'tween', duration: 0.3 }}
+              className="lg:hidden fixed left-0 top-0 h-screen w-72 bg-card/95 backdrop-blur-2xl border-r border-foreground/10 z-50 flex flex-col select-none"
+            >
+              <div className="h-16 flex items-center justify-between px-5 border-b border-foreground/5">
+                <span className="text-lg font-bold bg-gradient-to-r from-primary-400 to-secondary-500 bg-clip-text text-transparent">
+                  Expense Tracker
+                </span>
+                <IconButton
+                  onClick={() => setMobileMenuOpen(false)}
+                  variant="ghost"
+                  className="text-foreground/60 hover:text-foreground hover:bg-foreground/5"
+                >
+                  <X className="h-5 w-5" />
+                </IconButton>
+              </div>
+              <nav className="p-4 space-y-2 flex-grow overflow-y-auto">
+                {navItems.map((item) => (
+                  <NavLink
+                    key={item.path}
+                    to={item.path}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={({ isActive }: { isActive: boolean }) =>
+                      cn(
+                        'flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-300',
+                        isActive
+                          ? 'bg-primary-500/10 border border-primary-500/20 text-primary-600 dark:text-white shadow-[0_0_15px_rgba(99,102,241,0.1)]'
+                          : 'text-foreground/60 hover:bg-foreground/5 hover:text-foreground'
+                      )
+                    }
+                  >
+                    <item.icon className="h-5 w-5 flex-shrink-0" />
+                    <span>{item.label}</span>
+                  </NavLink>
+                ))}
+              </nav>
+              <div className="p-4 border-t border-foreground/5 bg-foreground/[0.01]">
                 <NavLink
-                  key={item.path}
-                  to={item.path}
+                  to="/settings"
                   onClick={() => setMobileMenuOpen(false)}
                   className={({ isActive }: { isActive: boolean }) =>
                     cn(
-                      'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200',
+                      'flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-300',
                       isActive
-                        ? 'bg-white/20 text-white'
-                        : 'text-white/70 hover:bg-white/10 hover:text-white'
+                        ? 'bg-primary-500/10 border border-primary-500/20 text-primary-600 dark:text-white'
+                        : 'text-foreground/60 hover:bg-foreground/5 hover:text-foreground'
                     )
                   }
                 >
-                  <item.icon className="h-5 w-5 flex-shrink-0" />
-                  <span>{item.label}</span>
+                  <Settings className="h-5 w-5" />
+                  <span>Settings</span>
                 </NavLink>
-              ))}
-            </nav>
-            <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-white/10">
-              <NavLink
-                to="/settings"
-                onClick={() => setMobileMenuOpen(false)}
-                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-white/70 hover:bg-white/10 hover:text-white"
-              >
-                <Settings className="h-5 w-5" />
-                <span>Settings</span>
-              </NavLink>
-              <button
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  signOut();
-                }}
-                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-white/70 hover:bg-white/10 hover:text-white w-full mt-1"
-              >
-                <LogOut className="h-5 w-5" />
-                <span>Sign Out</span>
-              </button>
-            </div>
-          </aside>
-        </>
-      )}
+                <button
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    signOut();
+                  }}
+                  className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-foreground/60 hover:bg-foreground/5 hover:text-foreground w-full mt-2 transition-all duration-300"
+                >
+                  <LogOut className="h-5 w-5 text-foreground/60 hover:text-red-500 transition-colors" />
+                  <span>Sign Out</span>
+                </button>
+              </div>
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
 
-      {/* Main Content */}
+      {/* Main Content Pane */}
       <main
         className={cn(
-          'transition-all duration-300',
-          sidebarOpen ? 'lg:ml-64' : 'lg:ml-20',
+          'transition-all duration-300 flex-1 relative z-10 min-h-screen flex flex-col',
+          sidebarOpen ? 'lg:pl-64' : 'lg:pl-20',
           'pt-16 lg:pt-0'
         )}
       >
-        {/* Top Bar */}
-        <header className="sticky top-0 lg:top-0 z-20 h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 lg:px-6">
-          <div className="flex-1 max-w-lg">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search expenses..."
-                className="w-full max-w-md rounded-lg border-0 bg-slate-100 pl-10 pr-4 py-2 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
-              />
+        {/* Top Header Bar */}
+        <header className="sticky top-0 z-20 h-16 bg-card/75 dark:bg-background/45 backdrop-blur-xl border-b border-foreground/10 dark:border-white/5 select-none">
+          <div className="w-full max-w-[1440px] mx-auto h-full flex items-center justify-between px-6 lg:px-8">
+            <div className="flex-1 max-w-lg">
+              <div className="relative group">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-foreground/40 group-hover:text-foreground/65 transition-colors" />
+                <input
+                  type="text"
+                  placeholder="Search expenses, budgets..."
+                  className="w-full max-w-sm rounded-xl border border-foreground/10 dark:border-white/5 bg-background pl-11 pr-4 py-2.5 text-sm text-foreground placeholder:text-foreground/40 focus:outline-none focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500/50 transition-all duration-300"
+                />
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="hidden sm:flex items-center gap-2 text-sm text-slate-600">
-              <span className="font-medium">{profile?.full_name || profile?.email}</span>
-            </div>
-            <div className="h-8 w-8 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-semibold text-sm">
-              {profile?.full_name?.charAt(0).toUpperCase() || profile?.email?.charAt(0).toUpperCase()}
+            
+            <div className="flex items-center gap-4">
+              <IconButton 
+                onClick={toggleDarkMode}
+                className="text-foreground/60 hover:text-foreground hover:bg-foreground/5 p-2 rounded-xl"
+              >
+                {darkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+              </IconButton>
+
+              <IconButton className="text-foreground/60 hover:bg-foreground/5 relative p-2 rounded-xl">
+                <Bell className="h-5 w-5" />
+                <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-gradient-to-r from-primary-500 to-secondary-500 rounded-full" />
+              </IconButton>
+
+              <div className="h-8 w-px bg-foreground/10" />
+
+              <div className="flex items-center gap-3">
+                <div className="hidden sm:flex flex-col items-end">
+                  <span className="font-semibold text-sm text-foreground">
+                    {profile?.full_name || profile?.email?.split('@')[0]}
+                  </span>
+                  <span className="text-[10px] font-semibold text-foreground/60 tracking-wider uppercase">
+                    Personal Account
+                  </span>
+                </div>
+                <Link to="/settings" className="h-9 w-9 block rounded-xl bg-gradient-to-tr from-primary-500 to-secondary-500 p-[1.5px] shadow-[0_0_15px_rgba(99,102,241,0.25)] hover:shadow-[0_0_20px_rgba(99,102,241,0.4)] transition-all duration-300 cursor-pointer">
+                  <div className="h-full w-full rounded-[10px] bg-card flex items-center justify-center text-foreground font-extrabold text-sm border border-foreground/10">
+                    {profile?.full_name?.charAt(0).toUpperCase() || profile?.email?.charAt(0).toUpperCase()}
+                  </div>
+                </Link>
+              </div>
             </div>
           </div>
         </header>
 
-        {/* Page Content */}
-        <div className="p-4 lg:p-6">{children}</div>
+        {/* Page Area Wrapper */}
+        <div className="p-6 lg:p-8 flex-1 flex flex-col relative z-10 max-w-[1440px] w-full mx-auto">
+          {children}
+        </div>
       </main>
     </div>
   );

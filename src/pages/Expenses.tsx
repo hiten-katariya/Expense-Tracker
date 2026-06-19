@@ -8,6 +8,7 @@ import { ExpenseRowSkeleton } from '@/components/Skeleton';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { useUIStore } from '@/stores/uiStore';
 import type { Expense } from '@/types';
+import { CategoryIcon } from './Categories';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -64,8 +65,8 @@ export function ExpensesPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Expenses</h1>
-          <p className="text-slate-500">Manage and track all your expenses</p>
+          <h1 className="text-2xl font-bold text-foreground">Expenses</h1>
+          <p className="text-foreground/60">Manage and track all your expenses</p>
         </div>
         <Link to="/expenses/new">
           <Button leftIcon={<Plus className="h-4 w-4" />}>Add Expense</Button>
@@ -78,7 +79,7 @@ export function ExpensesPage() {
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-foreground/40" />
                 <input
                   type="text"
                   placeholder="Search expenses..."
@@ -93,12 +94,16 @@ export function ExpensesPage() {
                     params.set('page', '1');
                     setSearchParams(params);
                   }}
-                  className="w-full rounded-lg border border-slate-300 bg-white pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                  className="w-full rounded-lg border border-foreground/10 bg-background pl-10 pr-4 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                 />
               </div>
             </div>
             <Select
-              options={categories?.map((c) => ({ value: c.id, label: `${c.icon} ${c.name}` })) || []}
+              options={categories?.map((c) => {
+                const parent = c.parent_id ? categories.find((p) => p.id === c.parent_id) : null;
+                const label = parent ? `${parent.name} › ${c.name}` : c.name;
+                return { value: c.id, label };
+              }) || []}
               placeholder="All Categories"
               value={categoryFilter}
               onChange={(e) => {
@@ -117,26 +122,31 @@ export function ExpensesPage() {
         </CardContent>
       </Card>
 
-      {/* Expense List */}
+        {/* Expense List */}
       <Card>
         {isLoading ? (
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-foreground/5">
             {[...Array(5)].map((_, i) => (
               <ExpenseRowSkeleton key={i} />
             ))}
           </div>
         ) : expenseData && expenseData.data.length > 0 ? (
           <>
-            <div className="divide-y divide-slate-100">
+            <div className="divide-y divide-foreground/5">
               {expenseData.data.map((expense) => (
                 <div
                   key={expense.id}
-                  className="flex items-center gap-4 py-4 px-6 hover:bg-slate-50 transition-colors group"
+                  className="flex items-center gap-4 py-4 px-6 hover:bg-foreground/[0.02] transition-colors group"
                 >
-                  <span className="text-2xl">{expense.category?.icon || '📦'}</span>
+                  <div
+                    className="h-10 w-10 rounded-lg flex items-center justify-center text-white shrink-0"
+                    style={{ backgroundColor: expense.category?.color || '#95A5A6' }}
+                  >
+                    <CategoryIcon iconName={expense.category?.icon || 'Circle'} className="h-5 w-5" />
+                  </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-slate-900 truncate">
+                      <p className="text-sm font-medium text-foreground truncate">
                         {expense.title}
                       </p>
                       {expense.is_flagged && (
@@ -145,7 +155,7 @@ export function ExpensesPage() {
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-slate-500">
+                    <div className="flex items-center gap-2 text-xs text-foreground/50">
                       <Calendar className="h-3 w-3" />
                       {formatDate(expense.expense_date)}
                       <span>•</span>
@@ -162,9 +172,13 @@ export function ExpensesPage() {
                       color: '#fff',
                     }}
                   >
-                    {expense.category?.name || 'Other'}
+                    {expense.category ? (
+                      expense.category.parent_id && categories
+                        ? `${categories.find((p) => p.id === expense.category!.parent_id)?.name || ''} › ${expense.category.name}`
+                        : expense.category.name
+                    ) : 'Other'}
                   </span>
-                  <span className="text-base font-semibold text-slate-900">
+                  <span className="text-base font-semibold text-foreground">
                     {formatCurrency(expense.amount)}
                   </span>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -188,8 +202,8 @@ export function ExpensesPage() {
 
             {/* Pagination */}
             {totalPages > 1 && (
-              <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100">
-                <p className="text-sm text-slate-500">
+              <div className="flex items-center justify-between px-6 py-4 border-t border-foreground/5">
+                <p className="text-sm text-foreground/60">
                   Showing {(page - 1) * ITEMS_PER_PAGE + 1} to{' '}
                   {Math.min(page * ITEMS_PER_PAGE, totalExpenses)} of {totalExpenses} expenses
                 </p>
@@ -205,7 +219,7 @@ export function ExpensesPage() {
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </IconButton>
-                  <span className="text-sm text-slate-600">
+                  <span className="text-sm text-foreground/85">
                     Page {page} of {totalPages}
                   </span>
                   <IconButton
@@ -225,8 +239,8 @@ export function ExpensesPage() {
           </>
         ) : (
           <div className="py-16 text-center">
-            <p className="text-slate-500">No expenses found</p>
-            <p className="text-sm text-slate-400 mt-1">
+            <p className="text-foreground/60">No expenses found</p>
+            <p className="text-sm text-foreground/45 mt-1">
               {search || categoryFilter
                 ? 'Try adjusting your filters'
                 : 'Add your first expense to get started'}
@@ -306,10 +320,10 @@ export function ExpenseFormPage() {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">
+        <h1 className="text-2xl font-bold text-foreground">
           {isEdit ? 'Edit Expense' : 'Add Expense'}
         </h1>
-        <p className="text-slate-500">
+        <p className="text-foreground/60">
           {isEdit ? 'Update the details of your expense' : 'Record a new expense'}
         </p>
       </div>
@@ -331,7 +345,7 @@ export function ExpenseFormPage() {
                 step="0.01"
                 placeholder="0.00"
                 error={errors.amount?.message}
-                leftIcon={<span className="text-slate-400">₹</span>}
+                leftIcon={<span className="text-foreground/45">₹</span>}
                 {...register('amount', { valueAsNumber: true })}
               />
 
@@ -346,7 +360,11 @@ export function ExpenseFormPage() {
             <div className="grid grid-cols-2 gap-4">
               <Select
                 label="Category"
-                options={categories?.map((c) => ({ value: c.id, label: `${c.icon} ${c.name}` })) || []}
+                options={categories?.map((c) => {
+                  const parent = c.parent_id ? categories.find((p) => p.id === c.parent_id) : null;
+                  const label = parent ? `${parent.name} › ${c.name}` : c.name;
+                  return { value: c.id, label };
+                }) || []}
                 placeholder="Select category"
                 {...register('category_id')}
               />
