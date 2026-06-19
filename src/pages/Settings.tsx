@@ -1,15 +1,20 @@
 import { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { useAuthStore } from '@/stores/authStore';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { TextReveal } from '@/components/ui/cascade-text';
 import { Input, Select } from '@/components/Input';
 import { useUIStore } from '@/stores/uiStore';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { User, Shield, Bell, Moon, Sun, Globe, Loader } from 'lucide-react';
+import {
+  User, Shield, Bell, Moon, Sun, Globe, Loader,
+  CheckCircle2, XCircle, Smartphone, LogOut, Trash2,
+} from 'lucide-react';
 import { CURRENCIES } from '@/types';
 import { supabase, updateProfile } from '@/lib/supabase';
+import { cn } from '@/lib/utils';
 
 const profileSchema = z.object({
   full_name: z.string().min(2, 'Name must be at least 2 characters').optional().nullable(),
@@ -20,85 +25,85 @@ const profileSchema = z.object({
   country: z.string().optional().nullable(),
   pincode: z.string().optional().nullable(),
 });
-
 type ProfileFormData = z.infer<typeof profileSchema>;
+
+const fadeUp = {
+  hidden: { opacity: 0, y: 20 },
+  show: (i: number) => ({
+    opacity: 1, y: 0,
+    transition: { duration: 0.45, delay: i * 0.08, ease: [0.22, 1, 0.36, 1] as [number,number,number,number] },
+  }),
+};
+
+function SettingRow({
+  icon, title, description, action, danger = false,
+}: {
+  icon: React.ReactNode; title: string; description?: string; action: React.ReactNode; danger?: boolean;
+}) {
+  return (
+    <div className={cn('flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-4 px-5 rounded-xl transition-colors', danger ? 'hover:bg-red-500/4' : 'hover:bg-foreground/[0.02]')}>
+      <div className="flex items-center gap-3.5">
+        <div className={cn('h-9 w-9 rounded-xl flex items-center justify-center shrink-0', danger ? 'bg-red-500/10' : 'bg-foreground/5')}>
+          <span className={danger ? 'text-red-500' : 'text-foreground/60'}>{icon}</span>
+        </div>
+        <div>
+          <p className={cn('text-sm font-semibold', danger ? 'text-red-500' : 'text-foreground')}>{title}</p>
+          {description && <p className="text-xs text-foreground/50 mt-0.5 max-w-sm">{description}</p>}
+        </div>
+      </div>
+      <div className="sm:shrink-0">{action}</div>
+    </div>
+  );
+}
+
+function SectionCard({ title, icon, description, children, delay = 0, danger = false }: {
+  title: string; icon: React.ReactNode; description?: string; children: React.ReactNode; delay?: number; danger?: boolean;
+}) {
+  return (
+    <motion.div
+      custom={delay}
+      initial="hidden"
+      animate="show"
+      variants={fadeUp}
+      className={cn(
+        'rounded-2xl border backdrop-blur-xl overflow-hidden',
+        danger
+          ? 'border-red-500/20 bg-red-500/[0.02]'
+          : 'border-foreground/10 bg-white/50 dark:bg-white/[0.025] shadow-glass'
+      )}
+    >
+      <div className={cn('px-6 py-5 border-b', danger ? 'border-red-500/10' : 'border-foreground/5')}>
+        <div className="flex items-center gap-3">
+          <div className={cn('h-9 w-9 rounded-xl flex items-center justify-center', danger ? 'bg-red-500/10' : 'bg-primary-500/10')}>
+            <span className={danger ? 'text-red-500' : 'text-primary-500'}>{icon}</span>
+          </div>
+          <div>
+            <h3 className={cn('font-bold text-sm', danger ? 'text-red-500' : 'text-foreground')}>{title}</h3>
+            {description && <p className="text-xs text-foreground/50 mt-0.5">{description}</p>}
+          </div>
+        </div>
+      </div>
+      <div className="divide-y divide-foreground/5">{children}</div>
+    </motion.div>
+  );
+}
 
 export function SettingsPage() {
   const { user, profile, signOut } = useAuthStore();
   const refreshProfile = useAuthStore((s) => s.refreshProfile);
   const addNotification = useUIStore((s) => s.addNotification);
   const { darkMode, toggleDarkMode } = useUIStore();
-
   const [isResending, setIsResending] = useState(false);
   const [cooldown, setCooldown] = useState(0);
 
-  // Manage cooldown timer
   useEffect(() => {
     if (cooldown > 0) {
-      const timer = setTimeout(() => setCooldown(cooldown - 1), 1000);
-      return () => clearTimeout(timer);
+      const t = setTimeout(() => setCooldown(cooldown - 1), 1000);
+      return () => clearTimeout(t);
     }
   }, [cooldown]);
 
-  const handleSignOutCurrent = async () => {
-    try {
-      await signOut({ scope: 'local' });
-      addNotification({ type: 'success', title: 'Signed Out', message: 'Logged out successfully.' });
-    } catch {
-      addNotification({ type: 'error', title: 'Error', message: 'Failed to sign out.' });
-    }
-  };
-
-  const handleSignOutGlobal = async () => {
-    try {
-      await signOut({ scope: 'global' });
-      addNotification({ type: 'success', title: 'Signed Out', message: 'Logged out of all devices successfully.' });
-    } catch {
-      addNotification({ type: 'error', title: 'Error', message: 'Failed to sign out from all devices.' });
-    }
-  };
-
-  const handleSignOutOthers = async () => {
-    try {
-      await signOut({ scope: 'others' });
-      addNotification({ type: 'success', title: 'Sessions Cleared', message: 'Logged out of all other devices successfully.' });
-    } catch {
-      addNotification({ type: 'error', title: 'Error', message: 'Failed to sign out from other devices.' });
-    }
-  };
-
-  const onResendEmail = async () => {
-    if (!user || !user.email) return;
-    setIsResending(true);
-    try {
-      const { error } = await supabase.auth.resend({
-        type: 'signup',
-        email: user.email,
-      });
-      if (error) throw error;
-
-      addNotification({
-        type: 'success',
-        title: 'Verification Email Sent',
-        message: 'A confirmation link has been sent to your email address by Supabase Auth.',
-      });
-      setCooldown(60);
-    } catch (err) {
-      addNotification({
-        type: 'error',
-        title: 'Error Resending Email',
-        message: err instanceof Error ? err.message : 'Please try again later.',
-      });
-    } finally {
-      setIsResending(false);
-    }
-  };
-
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting, isDirty },
-  } = useForm<ProfileFormData>({
+  const { register, handleSubmit, formState: { errors, isSubmitting, isDirty } } = useForm<ProfileFormData>({
     resolver: zodResolver(profileSchema),
     defaultValues: {
       full_name: profile?.full_name || '',
@@ -123,305 +128,198 @@ export function SettingsPage() {
         country: data.country || null,
         pincode: data.pincode || null,
       });
-
-      const { error: authError } = await supabase.auth.updateUser({
-        data: {
-          full_name: data.full_name,
-          phone_number: data.phone_number,
-          city: data.city,
-          state: data.state,
-          country: data.country,
-          pincode: data.pincode,
-        },
-      });
-
-      if (authError) throw authError;
-
+      await supabase.auth.updateUser({ data: { full_name: data.full_name } });
       await refreshProfile();
-      addNotification({ type: 'success', title: 'Settings saved', message: 'Your profile has been updated.' });
-    } catch (err: any) {
-      console.error("Settings profile update error:", err);
-      let errorMsg = 'Failed to update profile.';
-      if (err) {
-        errorMsg = err.message || err.details || JSON.stringify(err);
-        if (err.hint) {
-          errorMsg += ` (Hint: ${err.hint})`;
-        }
-        if (err.code) {
-          errorMsg += ` [Code: ${err.code}]`;
-        }
-      }
-      addNotification({ type: 'error', title: 'Error', message: errorMsg });
+      addNotification({ type: 'success', title: 'Saved', message: 'Your profile has been updated.' });
+    } catch (err: unknown) {
+      const e = err as { message?: string };
+      addNotification({ type: 'error', title: 'Error', message: e?.message || 'Failed to save.' });
     }
   };
 
+  const onResendEmail = async () => {
+    if (!user?.email) return;
+    setIsResending(true);
+    try {
+      const { error } = await supabase.auth.resend({ type: 'signup', email: user.email });
+      if (error) throw error;
+      addNotification({ type: 'success', title: 'Email Sent', message: 'Check your inbox for the verification link.' });
+      setCooldown(60);
+    } catch (err: unknown) {
+      const e = err as { message?: string };
+      addNotification({ type: 'error', title: 'Error', message: e?.message || 'Please try again.' });
+    } finally {
+      setIsResending(false);
+    }
+  };
+
+  const avatarLetter = profile?.full_name?.charAt(0).toUpperCase() || profile?.email?.charAt(0).toUpperCase() || '?';
+
   return (
-    <div className="max-w-3xl mx-auto space-y-8 pb-12">
-      <div>
-        <h1 className="text-3xl font-extrabold text-foreground tracking-tight">Settings</h1>
-        <p className="text-foreground/60 mt-1">Manage your account preferences and security</p>
+    <div className="max-w-2xl mx-auto space-y-6 pb-16">
+      <div className="mb-2">
+        <TextReveal
+          text="Settings"
+          subtitle="Manage your account preferences and security"
+          textSize="text-3xl"
+        />
       </div>
 
-      {/* Profile Section */}
-      <Card className="bg-card/45 backdrop-blur-2xl border-foreground/10 shadow-xl">
-        <CardHeader>
-          <CardTitle className="text-lg font-bold flex items-center gap-2 text-foreground">
-            <User className="h-5 w-5 text-primary-500" />
-            Profile Information
-          </CardTitle>
-          <CardDescription className="text-foreground/60">Update your personal and contact details</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-            <div className="flex items-center gap-4 pb-4 border-b border-foreground/5">
-              <div className="h-16 w-16 rounded-full bg-primary-500/10 border border-primary-500/20 flex items-center justify-center text-primary-500 font-extrabold text-2xl shadow-sm">
-                {profile?.full_name?.charAt(0).toUpperCase() || profile?.email?.charAt(0).toUpperCase()}
-              </div>
-              <div>
-                <p className="text-lg font-bold text-foreground">
-                  {profile?.full_name || 'User'}
-                </p>
-                <p className="text-sm text-foreground/60 font-medium">{profile?.email}</p>
-              </div>
+      {/* Profile Hero Card */}
+      <motion.div custom={0} initial="hidden" animate="show" variants={fadeUp}
+        className="rounded-2xl border border-foreground/10 bg-white/50 dark:bg-white/[0.025] backdrop-blur-xl shadow-glass overflow-hidden"
+      >
+        {/* Gradient banner */}
+        <div className="h-20 bg-gradient-to-r from-primary-500/20 via-primary-600/15 to-secondary-500/10 relative overflow-hidden">
+          <div className="absolute inset-0 blob-animate-1 opacity-40" style={{ background: 'radial-gradient(ellipse at 20% 50%, rgba(99,102,241,0.3) 0%, transparent 60%)' }} />
+        </div>
+        <div className="px-6 pb-6 -mt-10">
+          {/* Avatar */}
+          <div className="relative mb-4 w-fit">
+            <div className="h-20 w-20 rounded-2xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white font-black text-3xl shadow-xl shadow-primary-500/30 border-4 border-background">
+              {avatarLetter}
             </div>
+            <div className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-emerald-500 border-2 border-background" title="Online" />
+          </div>
+          <p className="text-xl font-extrabold text-foreground">{profile?.full_name || 'Your Name'}</p>
+          <p className="text-sm text-foreground/50">{profile?.email}</p>
+          <div className="flex items-center gap-2 mt-2">
+            {user?.email_confirmed_at ? (
+              <span className="flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
+                <CheckCircle2 className="h-3 w-3" /> Verified
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-xs font-semibold text-red-600 dark:text-red-400 bg-red-500/10 px-2.5 py-1 rounded-full border border-red-500/20">
+                <XCircle className="h-3 w-3" /> Unverified
+              </span>
+            )}
+            <span className="text-xs text-foreground/40 bg-foreground/5 px-2.5 py-1 rounded-full">
+              Personal Account
+            </span>
+          </div>
+        </div>
+      </motion.div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Input
-                label="Full Name"
-                placeholder="John Doe"
-                error={errors.full_name?.message}
-                {...register('full_name')}
-              />
-              <Input
-                label="Phone Number"
-                placeholder="9876543210"
-                error={errors.phone_number?.message}
-                {...register('phone_number')}
-              />
+      {/* Profile Form */}
+      <SectionCard title="Profile Information" icon={<User className="h-4 w-4" />} description="Update your personal details" delay={1}>
+        <div className="p-6">
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Input label="Full Name" placeholder="John Doe" error={errors.full_name?.message} {...register('full_name')} />
+              <Input label="Phone Number" placeholder="9876543210" error={errors.phone_number?.message} {...register('phone_number')} />
             </div>
-
             <Select
               label="Preferred Currency"
               options={CURRENCIES.map((c) => ({ value: c.code, label: `${c.symbol} ${c.name} (${c.code})` }))}
               {...register('currency_code')}
             />
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Input
-                label="City"
-                placeholder="Pune"
-                error={errors.city?.message}
-                {...register('city')}
-              />
-              <Input
-                label="State"
-                placeholder="Maharashtra"
-                error={errors.state?.message}
-                {...register('state')}
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Input label="City" placeholder="Pune" error={errors.city?.message} {...register('city')} />
+              <Input label="State" placeholder="Maharashtra" error={errors.state?.message} {...register('state')} />
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Input
-                label="Country"
-                placeholder="India"
-                error={errors.country?.message}
-                {...register('country')}
-              />
-              <Input
-                label="Pincode"
-                placeholder="411045"
-                error={errors.pincode?.message}
-                {...register('pincode')}
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Input label="Country" placeholder="India" error={errors.country?.message} {...register('country')} />
+              <Input label="Pincode" placeholder="411045" error={errors.pincode?.message} {...register('pincode')} />
             </div>
-
             <div className="flex items-center gap-3 pt-2">
-              <Button type="submit" disabled={!isDirty || isSubmitting}>
-                {isSubmitting ? 'Saving Changes...' : 'Save Changes'}
+              <Button type="submit" disabled={!isDirty || isSubmitting} isLoading={isSubmitting}>
+                Save Changes
               </Button>
               {isDirty && (
-                <Button type="button" variant="ghost">
-                  Cancel
-                </Button>
+                <Button type="button" variant="ghost" onClick={() => window.location.reload()}>Reset</Button>
               )}
             </div>
           </form>
-        </CardContent>
-      </Card>
+        </div>
+      </SectionCard>
 
-      {/* Account Section */}
-      <Card className="bg-card/45 backdrop-blur-2xl border-foreground/10 shadow-xl">
-        <CardHeader>
-          <CardTitle className="text-lg font-bold flex items-center gap-2 text-foreground">
-            <Shield className="h-5 w-5 text-primary-500" />
-            Account Security
-          </CardTitle>
-          <CardDescription className="text-foreground/60">Manage email verification and login sessions</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4 divide-y divide-foreground/5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-3">
-            <div>
-              <p className="text-sm font-semibold text-foreground">Email Status</p>
-              <div className="flex items-center gap-1.5 mt-1">
-                {user?.email_confirmed_at ? (
-                  <span className="text-xs font-bold text-emerald-500 flex items-center gap-1">
-                    ✓ Email Verified
-                  </span>
-                ) : (
-                  <span className="text-xs font-bold text-red-500 flex items-center gap-1">
-                    ❌ Email Not Verified
-                  </span>
-                )}
-              </div>
-              {!user?.email_confirmed_at && (
-                <p className="text-[10px] text-foreground/50 mt-1">
-                  Confirm the link sent to your inbox to enable verification status.
-                </p>
-              )}
-            </div>
-            {!user?.email_confirmed_at && (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={onResendEmail}
-                disabled={isResending || cooldown > 0}
-                className="font-bold w-full sm:w-auto"
-              >
-                {isResending ? (
-                  <>
-                    <Loader className="h-4 w-4 animate-spin mr-2" /> Resending...
-                  </>
-                ) : cooldown > 0 ? (
-                  `Resend in ${cooldown}s`
-                ) : (
-                  'Resend Verification Email'
-                )}
-              </Button>
-            )}
-          </div>
-
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-4.5">
-            <div>
-              <p className="text-sm font-semibold text-foreground">Multi-Factor Authentication</p>
-              <p className="text-xs text-foreground/60 mt-1 font-medium">
-                {profile?.mfa_enabled ? 'MFA is currently active' : 'Add another layer of safety to your account'}
-              </p>
-            </div>
-            <Button variant="secondary" size="sm" className="w-full sm:w-auto">
-              {profile?.mfa_enabled ? 'Disable' : 'Enable'}
+      {/* Security */}
+      <SectionCard title="Account Security" icon={<Shield className="h-4 w-4" />} description="Manage authentication and sessions" delay={2}>
+        <SettingRow
+          icon={<CheckCircle2 className="h-4 w-4" />}
+          title="Email Verification"
+          description={user?.email_confirmed_at ? 'Your email is verified and secure.' : 'Verify your email to unlock all features.'}
+          action={!user?.email_confirmed_at ? (
+            <Button size="sm" variant="secondary" onClick={onResendEmail} disabled={isResending || cooldown > 0}>
+              {isResending ? <><Loader className="h-3.5 w-3.5 animate-spin mr-1.5" />Sending...</> : cooldown > 0 ? `Retry in ${cooldown}s` : 'Resend Email'}
             </Button>
-          </div>
+          ) : (
+            <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">✓ Verified</span>
+          )}
+        />
+        <SettingRow
+          icon={<Smartphone className="h-4 w-4" />}
+          title="Two-Factor Authentication"
+          description={profile?.mfa_enabled ? 'MFA is active and protecting your account.' : 'Add a second layer of security to your account.'}
+          action={<Button size="sm" variant="secondary">{profile?.mfa_enabled ? 'Disable MFA' : 'Enable MFA'}</Button>}
+        />
+        <SettingRow
+          icon={<LogOut className="h-4 w-4" />}
+          title="Sign Out This Device"
+          description="Log out of your account on this device only."
+          action={<Button size="sm" variant="secondary" onClick={() => signOut({ scope: 'local' })}>Sign Out</Button>}
+        />
+        <SettingRow
+          icon={<LogOut className="h-4 w-4" />}
+          title="Sign Out All Devices"
+          description="Log out globally from all active sessions."
+          action={<Button size="sm" variant="danger" onClick={() => signOut({ scope: 'global' })}>Sign Out All</Button>}
+        />
+      </SectionCard>
 
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-4.5">
-            <div>
-              <p className="text-sm font-semibold text-foreground">Sign Out</p>
-              <p className="text-xs text-foreground/60 mt-1 font-medium">Log out of your account on this device only</p>
-            </div>
-            <Button variant="secondary" size="sm" onClick={handleSignOutCurrent} className="w-full sm:w-auto">
-              Sign Out
-            </Button>
-          </div>
-
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-4.5">
-            <div>
-              <p className="text-sm font-semibold text-foreground">Sign Out of All Devices</p>
-              <p className="text-xs text-foreground/60 mt-1 font-medium">Log out of your account globally on all devices</p>
-            </div>
-            <Button variant="danger" size="sm" onClick={handleSignOutGlobal} className="w-full sm:w-auto font-bold">
-              Sign Out All
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Preferences Section */}
-      <Card className="bg-card/45 backdrop-blur-2xl border-foreground/10 shadow-xl">
-        <CardHeader>
-          <CardTitle className="text-lg font-bold flex items-center gap-2 text-foreground">
-            <Globe className="h-5 w-5 text-primary-500" />
-            Preferences
-          </CardTitle>
-          <CardDescription className="text-foreground/60">Customize your visual and alert settings</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between py-3">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-foreground/5 rounded-xl border border-foreground/5">
-                {darkMode ? <Moon className="h-5 w-5 text-indigo-400" /> : <Sun className="h-5 w-5 text-amber-500" />}
-              </div>
-              <div>
-                <p className="text-sm font-bold text-foreground">
-                  {darkMode ? 'Light Mode' : 'Dark Mode'}
-                </p>
-                <p className="text-xs text-foreground/60 mt-0.5">
-                  {darkMode ? 'Switch to light theme' : 'Switch to dark theme'}
-                </p>
-              </div>
-            </div>
+      {/* Preferences */}
+      <SectionCard title="Preferences" icon={<Globe className="h-4 w-4" />} description="Customize your experience" delay={3}>
+        <SettingRow
+          icon={darkMode ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+          title={darkMode ? 'Dark Mode' : 'Light Mode'}
+          description={darkMode ? 'Switch to light theme' : 'Switch to dark theme'}
+          action={
             <button
               onClick={toggleDarkMode}
-              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500/50 ${
-                darkMode ? 'bg-primary-500' : 'bg-foreground/10'
-              }`}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500/50 ${darkMode ? 'bg-primary-500' : 'bg-foreground/15'}`}
             >
-              <span
-                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                  darkMode ? 'translate-x-5' : 'translate-x-0'
-                }`}
-              />
+              <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-300 ease-in-out ${darkMode ? 'translate-x-5' : 'translate-x-0'}`} />
             </button>
-          </div>
-
-          <div className="flex items-center justify-between py-3 border-t border-foreground/5">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-foreground/5 rounded-xl border border-foreground/5">
-                <Bell className="h-5 w-5 text-primary-500" />
-              </div>
-              <div>
-                <p className="text-sm font-bold text-foreground">Email Notifications</p>
-                <p className="text-xs text-foreground/60 mt-0.5">Budget alerts and summaries</p>
-              </div>
-            </div>
+          }
+        />
+        <SettingRow
+          icon={<Bell className="h-4 w-4" />}
+          title="Email Notifications"
+          description="Budget alerts, weekly summaries, and spending insights."
+          action={
             <button className="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-primary-500 transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500/50">
               <span className="pointer-events-none inline-block h-5 w-5 transform translate-x-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out" />
             </button>
-          </div>
-        </CardContent>
-      </Card>
+          }
+        />
+      </SectionCard>
 
       {/* Danger Zone */}
-      <Card className="border-red-500/30 bg-red-500/[0.02] backdrop-blur-2xl shadow-xl">
-        <CardHeader>
-          <CardTitle className="text-lg font-bold text-red-500">Danger Zone</CardTitle>
-          <CardDescription className="text-red-500/60">Irreversible and destructive actions</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4 divide-y divide-red-500/10">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-3">
-            <div>
-              <p className="text-sm font-semibold text-foreground">Sign out from other devices</p>
-              <p className="text-xs text-foreground/65 mt-1">
-                Log out of all active sessions except this current one
-              </p>
-            </div>
-            <Button variant="secondary" size="sm" onClick={handleSignOutOthers} className="w-full sm:w-auto font-semibold">
-              Sign Out Others
+      <SectionCard title="Danger Zone" icon={<Trash2 className="h-4 w-4" />} description="Irreversible and destructive actions" delay={4} danger>
+        <SettingRow
+          icon={<LogOut className="h-4 w-4" />}
+          title="Sign Out Other Devices"
+          description="Keep this session active but log out everywhere else."
+          action={<Button size="sm" variant="secondary" onClick={() => signOut({ scope: 'others' })}>Sign Out Others</Button>}
+          danger
+        />
+        <SettingRow
+          icon={<Trash2 className="h-4 w-4" />}
+          title="Delete Account"
+          description="Permanently delete your profile and erase all data. This cannot be undone."
+          action={
+            <Button size="sm" variant="danger" className="gap-1.5">
+              <Trash2 className="h-3.5 w-3.5" /> Delete Account
             </Button>
-          </div>
+          }
+          danger
+        />
+      </SectionCard>
 
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-4.5">
-            <div>
-              <p className="text-sm font-semibold text-foreground">Delete Account</p>
-              <p className="text-xs text-foreground/65 mt-1">
-                Permanently delete your user profile and erase all transaction data
-              </p>
-            </div>
-            <Button variant="danger" size="sm" className="w-full sm:w-auto font-extrabold">
-              Delete Account
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Footer */}
+      <p className="text-center text-xs text-foreground/30 pt-4">
+        Expense Tracker · Version 1.0 · <a href="#" className="hover:text-foreground/60 transition-colors">Privacy Policy</a> · <a href="#" className="hover:text-foreground/60 transition-colors">Terms</a>
+      </p>
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
 import { useUIStore } from '@/stores/uiStore';
-import { LayoutDashboard, Receipt, FolderOpen, Target, ChartPie as PieChart, Settings, Users, LogOut, Menu, X, Bell, Search, Sun, Moon } from 'lucide-react';
+import { LayoutDashboard, Receipt, FolderOpen, Target, ChartPie as PieChart, Settings, Users, LogOut, Menu, X, Bell, Search, Sun, Moon, Trash2 } from 'lucide-react';
 import { IconButton } from './Button';
 
 const navItems = [
@@ -14,6 +14,7 @@ const navItems = [
   { path: '/budgets', icon: Target, label: 'Budgets' },
   { path: '/reports', icon: PieChart, label: 'Reports' },
   { path: '/family', icon: Users, label: 'Family' },
+  { path: '/trash', icon: Trash2, label: 'Trash' },
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -24,10 +25,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col lg:flex-row relative">
-      {/* Background Mesh Gradients */}
-      <div className="fixed inset-0 grid-bg opacity-10 dark:opacity-30 pointer-events-none z-0" />
-      <div className="fixed -top-40 -left-40 h-[600px] w-[600px] rounded-full bg-primary-500/5 blur-3xl pointer-events-none z-0 animate-pulse-slow" />
-      <div className="fixed bottom-0 right-0 h-[600px] w-[600px] rounded-full bg-secondary-500/5 blur-3xl pointer-events-none z-0 animate-pulse-slow" />
+      {/* Premium Animated Background Blobs */}
+      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+        <div className="absolute -top-48 -left-48 h-[700px] w-[700px] rounded-full bg-gradient-to-br from-primary-500/10 to-primary-700/5 blur-3xl blob-animate-1" />
+        <div className="absolute top-1/3 -right-48 h-[600px] w-[600px] rounded-full bg-gradient-to-bl from-secondary-500/8 to-accent-pink/5 blur-3xl blob-animate-2" />
+        <div className="absolute -bottom-48 left-1/3 h-[500px] w-[500px] rounded-full bg-gradient-to-tr from-primary-700/8 to-secondary-600/5 blur-3xl blob-animate-3" />
+        <div className="fixed inset-0 grid-bg opacity-[0.04] dark:opacity-[0.07]" />
+      </div>
 
       {/* Desktop Sidebar */}
       <motion.aside
@@ -39,25 +43,30 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div className="h-16 flex items-center justify-between px-4 border-b border-foreground/5 flex-shrink-0">
           <AnimatePresence mode="wait">
             {sidebarOpen ? (
-              <motion.span
+              <motion.div
                 key="expanded-title"
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -10 }}
-                className="text-lg font-bold bg-gradient-to-r from-primary-600 to-secondary-600 dark:from-primary-400 dark:to-secondary-500 bg-clip-text text-transparent tracking-tight"
+                className="flex items-center gap-2.5"
               >
-                Expense Tracker
-              </motion.span>
+                <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white font-black text-xs shadow-lg shadow-primary-500/30">
+                  ET
+                </div>
+                <span className="text-sm font-bold bg-gradient-to-r from-primary-600 to-secondary-600 dark:from-primary-400 dark:to-secondary-500 bg-clip-text text-transparent tracking-tight">
+                  Expense Tracker
+                </span>
+              </motion.div>
             ) : (
-              <motion.span
+              <motion.div
                 key="collapsed-logo"
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.8 }}
-                className="text-lg font-black bg-gradient-to-r from-primary-600 to-secondary-600 dark:from-primary-400 dark:to-secondary-500 bg-clip-text text-transparent px-2"
+                className="h-7 w-7 rounded-lg bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white font-black text-xs shadow-lg shadow-primary-500/30"
               >
                 ET
-              </motion.span>
+              </motion.div>
             )}
           </AnimatePresence>
           <IconButton
@@ -84,12 +93,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     <motion.div
                       layoutId="activeTab"
                       transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                      className="absolute inset-0 bg-primary-500/10 border border-primary-500/20 rounded-xl z-0"
+                      className="absolute inset-0 bg-gradient-to-r from-primary-500/15 to-primary-600/10 border border-primary-500/25 rounded-xl z-0 shadow-[0_0_20px_rgba(99,102,241,0.12)]"
                     />
                   )}
                   <item.icon className={cn(
-                    "h-5 w-5 flex-shrink-0 z-10 transition-colors duration-300",
-                    isActive ? "text-primary-600 dark:text-primary-400" : "text-foreground/50 group-hover:text-foreground"
+                    "h-5 w-5 flex-shrink-0 z-10 transition-all duration-300",
+                    isActive ? "text-white" : "text-foreground/50 group-hover:text-foreground"
                   )} />
                   <AnimatePresence>
                     {sidebarOpen && (
@@ -97,8 +106,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
                         initial={{ opacity: 0, x: -5 }}
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: -5 }}
-                        className={cn(
-                          "z-10 transition-colors duration-300",
+                      className={cn(
+                          "z-10 transition-colors duration-300 text-sm",
                           isActive ? "text-primary-600 dark:text-white font-semibold" : "text-foreground/60 group-hover:text-foreground"
                         )}
                       >

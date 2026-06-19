@@ -1,18 +1,27 @@
+import { useState, useCallback } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
-import { useExpenses, useCategories, useCreateExpense, useUpdateExpense, useDeleteExpense } from '@/hooks/useQueries';
+import {
+  useExpenses, useCategories, useCreateExpense, useUpdateExpense,
+  useDeleteExpense, useCheckDuplicateExpense,
+} from '@/hooks/useQueries';
 import { Card, CardContent } from '@/components/Card';
 import { Button, IconButton } from '@/components/Button';
 import { Input, Select } from '@/components/Input';
 import { ExpenseRowSkeleton } from '@/components/Skeleton';
+import { AdvancedExpenseFilters } from '@/components/ExpenseFilters';
+import { DuplicateWarningModal } from '@/components/DuplicateWarningModal';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { useUIStore } from '@/stores/uiStore';
-import type { Expense } from '@/types';
+import type { Expense, ExpenseFilters } from '@/types';
 import { CategoryIcon } from './Categories';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, Search, ChevronLeft, ChevronRight, CreditCard as Edit2, Trash2, Calendar, TriangleAlert as AlertTriangle } from 'lucide-react';
+import {
+  Plus, Search, ChevronLeft, ChevronRight, CreditCard as Edit2,
+  Trash2, Calendar, TriangleAlert as AlertTriangle, UploadCloud,
+} from 'lucide-react';
 import { PAYMENT_METHODS } from '@/types';
 
 const expenseSchema = z.object({
@@ -38,97 +47,108 @@ export function ExpensesPage() {
 
   const page = parseInt(searchParams.get('page') || '1', 10);
   const search = searchParams.get('search') || '';
-  const categoryFilter = searchParams.get('category') || '';
 
-  const { data: expenseData, isLoading } = useExpenses(workspaceId, {
-    search,
-    category_id: categoryFilter || undefined,
-  }, page, ITEMS_PER_PAGE);
+  // Build filters object from URL params
+  const [advancedFilters, setAdvancedFilters] = useState<ExpenseFilters & { sort_field?: string; sort_dir?: 'asc' | 'desc' }>(() => {
+    const f: ExpenseFilters & { sort_field?: string; sort_dir?: 'asc' | 'desc' } = {};
+    const cat = searchParams.get('category');
+    if (cat) f.category_id = cat;
+    return f;
+  });
 
+  const allFilters = { ...advancedFilters, search: search || undefined };
+
+  const { data: expenseData, isLoading } = useExpenses(workspaceId, allFilters, page, ITEMS_PER_PAGE);
   const { data: categories } = useCategories(workspaceId);
   const deleteExpense = useDeleteExpense();
 
   const handleDelete = async (expense: Expense) => {
-    if (!window.confirm('Are you sure you want to delete this expense?')) return;
+    if (!window.confirm('Move this expense to trash?')) return;
     try {
       await deleteExpense.mutateAsync({ id: expense.id, workspaceId: expense.workspace_id });
-      addNotification({ type: 'success', title: 'Expense deleted', message: 'The expense has been moved to trash.' });
+      addNotification({ type: 'success', title: 'Moved to trash', message: `"${expense.title}" sent to trash.` });
     } catch {
       addNotification({ type: 'error', title: 'Error', message: 'Failed to delete expense' });
     }
   };
+
+  const handleFiltersChange = useCallback((f: ExpenseFilters & { sort_field?: string; sort_dir?: 'asc' | 'desc' }) => {
+    setAdvancedFilters(f);
+    const params = new URLSearchParams(searchParams);
+    params.set('page', '1');
+    if (f.category_id) params.set('category', f.category_id); else params.delete('category');
+    setSearchParams(params);
+  }, [searchParams, setSearchParams]);
 
   const totalExpenses = expenseData?.count || 0;
   const totalPages = Math.ceil(totalExpenses / ITEMS_PER_PAGE);
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Expenses</h1>
           <p className="text-foreground/60">Manage and track all your expenses</p>
         </div>
-        <Link to="/expenses/new">
-          <Button leftIcon={<Plus className="h-4 w-4" />}>Add Expense</Button>
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link to="/expenses/import">
+            <Button variant="secondary" leftIcon={<UploadCloud className="h-4 w-4" />}>
+              Import CSV
+            </Button>
+          </Link>
+          <Link to="/trash">
+            <Button variant="ghost" leftIcon={<Trash2 className="h-4 w-4" />}>
+              Trash
+            </Button>
+          </Link>
+          <Link to="/expenses/new">
+            <Button leftIcon={<Plus className="h-4 w-4" />}>Add Expense</Button>
+          </Link>
+        </div>
       </div>
 
-      {/* Filters */}
+      {/* Search + Advanced Filters */}
       <Card>
-        <CardContent className="p-4">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-foreground/40" />
-                <input
-                  type="text"
-                  placeholder="Search expenses..."
-                  defaultValue={search}
-                  onChange={(e) => {
-                    const params = new URLSearchParams(searchParams);
-                    if (e.target.value) {
-                      params.set('search', e.target.value);
-                    } else {
-                      params.delete('search');
-                    }
-                    params.set('page', '1');
-                    setSearchParams(params);
-                  }}
-                  className="w-full rounded-lg border border-foreground/10 bg-background pl-10 pr-4 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary-500/20"
-                />
-              </div>
+        <CardContent className="p-4 space-y-3">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-foreground/40" />
+              <input
+                type="text"
+                placeholder="Search expenses..."
+                defaultValue={search}
+                onChange={(e) => {
+                  const params = new URLSearchParams(searchParams);
+                  if (e.target.value) params.set('search', e.target.value);
+                  else params.delete('search');
+                  params.set('page', '1');
+                  setSearchParams(params);
+                }}
+                className="w-full rounded-xl border border-foreground/10 bg-background pl-10 pr-4 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+              />
             </div>
             <Select
               options={categories?.map((c) => {
                 const parent = c.parent_id ? categories.find((p) => p.id === c.parent_id) : null;
-                const label = parent ? `${parent.name} › ${c.name}` : c.name;
-                return { value: c.id, label };
+                return { value: c.id, label: parent ? `${parent.name} › ${c.name}` : c.name };
               }) || []}
               placeholder="All Categories"
-              value={categoryFilter}
-              onChange={(e) => {
-                const params = new URLSearchParams(searchParams);
-                if (e.target.value) {
-                  params.set('category', e.target.value);
-                } else {
-                  params.delete('category');
-                }
-                params.set('page', '1');
-                setSearchParams(params);
-              }}
+              value={advancedFilters.category_id || ''}
+              onChange={(e) => handleFiltersChange({ ...advancedFilters, category_id: e.target.value || undefined })}
               className="w-full sm:w-48"
             />
           </div>
+
+          <AdvancedExpenseFilters filters={advancedFilters} onChange={handleFiltersChange} />
         </CardContent>
       </Card>
 
-        {/* Expense List */}
+      {/* Expense List */}
       <Card>
         {isLoading ? (
           <div className="divide-y divide-foreground/5">
-            {[...Array(5)].map((_, i) => (
-              <ExpenseRowSkeleton key={i} />
-            ))}
+            {[...Array(5)].map((_, i) => <ExpenseRowSkeleton key={i} />)}
           </div>
         ) : expenseData && expenseData.data.length > 0 ? (
           <>
@@ -146,13 +166,14 @@ export function ExpensesPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-foreground truncate">
-                        {expense.title}
-                      </p>
+                      <p className="text-sm font-medium text-foreground truncate">{expense.title}</p>
                       {expense.is_flagged && (
                         <span className="text-red-500" title="Anomaly detected">
                           <AlertTriangle className="h-4 w-4" />
                         </span>
+                      )}
+                      {expense.import_source === 'csv' && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400">CSV</span>
                       )}
                     </div>
                     <div className="flex items-center gap-2 text-xs text-foreground/50">
@@ -166,11 +187,8 @@ export function ExpensesPage() {
                     </div>
                   </div>
                   <span
-                    className="px-2.5 py-1 rounded-full text-xs font-medium"
-                    style={{
-                      backgroundColor: expense.category?.color || '#95A5A6',
-                      color: '#fff',
-                    }}
+                    className="px-2.5 py-1 rounded-full text-xs font-medium hidden sm:inline-flex"
+                    style={{ backgroundColor: expense.category?.color || '#95A5A6', color: '#fff' }}
                   >
                     {expense.category ? (
                       expense.category.parent_id && categories
@@ -182,17 +200,10 @@ export function ExpensesPage() {
                     {formatCurrency(expense.amount)}
                   </span>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <IconButton
-                      size="sm"
-                      onClick={() => navigate(`/expenses/edit/${expense.id}`)}
-                    >
+                    <IconButton size="sm" onClick={() => navigate(`/expenses/edit/${expense.id}`)}>
                       <Edit2 className="h-4 w-4" />
                     </IconButton>
-                    <IconButton
-                      size="sm"
-                      variant="danger"
-                      onClick={() => handleDelete(expense)}
-                    >
+                    <IconButton size="sm" variant="danger" onClick={() => handleDelete(expense)}>
                       <Trash2 className="h-4 w-4" />
                     </IconButton>
                   </div>
@@ -200,37 +211,25 @@ export function ExpensesPage() {
               ))}
             </div>
 
-            {/* Pagination */}
             {totalPages > 1 && (
               <div className="flex items-center justify-between px-6 py-4 border-t border-foreground/5">
                 <p className="text-sm text-foreground/60">
-                  Showing {(page - 1) * ITEMS_PER_PAGE + 1} to{' '}
-                  {Math.min(page * ITEMS_PER_PAGE, totalExpenses)} of {totalExpenses} expenses
+                  Showing {(page - 1) * ITEMS_PER_PAGE + 1}–{Math.min(page * ITEMS_PER_PAGE, totalExpenses)} of {totalExpenses}
                 </p>
                 <div className="flex items-center gap-2">
-                  <IconButton
-                    size="sm"
-                    disabled={page <= 1}
-                    onClick={() => {
-                      const params = new URLSearchParams(searchParams);
-                      params.set('page', String(page - 1));
-                      setSearchParams(params);
-                    }}
-                  >
+                  <IconButton size="sm" disabled={page <= 1} onClick={() => {
+                    const params = new URLSearchParams(searchParams);
+                    params.set('page', String(page - 1));
+                    setSearchParams(params);
+                  }}>
                     <ChevronLeft className="h-4 w-4" />
                   </IconButton>
-                  <span className="text-sm text-foreground/85">
-                    Page {page} of {totalPages}
-                  </span>
-                  <IconButton
-                    size="sm"
-                    disabled={page >= totalPages}
-                    onClick={() => {
-                      const params = new URLSearchParams(searchParams);
-                      params.set('page', String(page + 1));
-                      setSearchParams(params);
-                    }}
-                  >
+                  <span className="text-sm text-foreground/85">Page {page} of {totalPages}</span>
+                  <IconButton size="sm" disabled={page >= totalPages} onClick={() => {
+                    const params = new URLSearchParams(searchParams);
+                    params.set('page', String(page + 1));
+                    setSearchParams(params);
+                  }}>
                     <ChevronRight className="h-4 w-4" />
                   </IconButton>
                 </div>
@@ -241,15 +240,13 @@ export function ExpensesPage() {
           <div className="py-16 text-center">
             <p className="text-foreground/60">No expenses found</p>
             <p className="text-sm text-foreground/45 mt-1">
-              {search || categoryFilter
+              {search || Object.keys(advancedFilters).length > 0
                 ? 'Try adjusting your filters'
                 : 'Add your first expense to get started'}
             </p>
-            {!search && !categoryFilter && (
+            {!search && Object.keys(advancedFilters).length === 0 && (
               <Link to="/expenses/new">
-                <Button variant="ghost" className="mt-4">
-                  Add Expense
-                </Button>
+                <Button variant="ghost" className="mt-4">Add Expense</Button>
               </Link>
             )}
           </div>
@@ -259,13 +256,15 @@ export function ExpensesPage() {
   );
 }
 
+// ────────────────────────────────────────────────────────────
+// Expense Form (Create / Edit) with Duplicate Detection
+// ────────────────────────────────────────────────────────────
 export function ExpenseFormPage() {
   const navigate = useNavigate();
   const { workspace, profile } = useAuthStore();
   const workspaceId = workspace?.id;
   const addNotification = useUIStore((s) => s.addNotification);
   const isEdit = window.location.pathname.includes('/edit/');
-
   const expenseId = isEdit ? window.location.pathname.split('/').pop() : null;
 
   const { data: categories } = useCategories(workspaceId);
@@ -274,6 +273,11 @@ export function ExpenseFormPage() {
 
   const createExpense = useCreateExpense();
   const updateExpense = useUpdateExpense();
+  const checkDuplicate = useCheckDuplicateExpense(workspaceId);
+
+  // Duplicate modal state
+  const [pendingData, setPendingData] = useState<ExpenseFormData | null>(null);
+  const [duplicateExpense, setDuplicateExpense] = useState<Expense | null>(null);
 
   const {
     register,
@@ -291,7 +295,7 @@ export function ExpenseFormPage() {
     },
   });
 
-  const onSubmit = async (data: ExpenseFormData) => {
+  const doSave = async (data: ExpenseFormData) => {
     try {
       const payload = {
         title: data.title,
@@ -303,7 +307,6 @@ export function ExpenseFormPage() {
         user_id: profile!.id,
         workspace_id: workspaceId!,
       };
-
       if (isEdit && expenseId) {
         await updateExpense.mutateAsync({ id: expenseId, updates: payload });
         addNotification({ type: 'success', title: 'Expense updated', message: 'Changes saved successfully.' });
@@ -312,20 +315,31 @@ export function ExpenseFormPage() {
         addNotification({ type: 'success', title: 'Expense added', message: 'Your expense has been recorded.' });
       }
       navigate('/expenses');
-    } catch (err: any) {
-      console.error("onSubmit Error saving expense:");
-      if (err) {
-        console.error("Code:", err.code);
-        console.error("Message:", err.message);
-        console.error("Details:", err.details);
-        console.error("Hint:", err.hint);
-      }
-      addNotification({
-        type: 'error',
-        title: 'Error',
-        message: err?.message || 'Failed to save expense'
-      });
+    } catch (err: unknown) {
+      const e = err as { code?: string; message?: string; details?: string; hint?: string };
+      console.error('Error saving expense:', e);
+      addNotification({ type: 'error', title: 'Error', message: e?.message || 'Failed to save expense' });
     }
+  };
+
+  const onSubmit = async (data: ExpenseFormData) => {
+    // Skip duplicate check on edit
+    if (!isEdit) {
+      try {
+        const existing = await checkDuplicate.mutateAsync({
+          title: data.title,
+          amount: data.amount,
+          expense_date: data.expense_date,
+          category_id: data.category_id || null,
+        });
+        if (existing) {
+          setPendingData(data);
+          setDuplicateExpense(existing);
+          return; // Show modal instead of saving
+        }
+      } catch { /* Silently ignore duplicate check errors — don't block save */ }
+    }
+    await doSave(data);
   };
 
   return (
@@ -359,7 +373,6 @@ export function ExpenseFormPage() {
                 leftIcon={<span className="text-foreground/45">₹</span>}
                 {...register('amount', { valueAsNumber: true })}
               />
-
               <Input
                 label="Date *"
                 type="date"
@@ -373,13 +386,11 @@ export function ExpenseFormPage() {
                 label="Category"
                 options={categories?.map((c) => {
                   const parent = c.parent_id ? categories.find((p) => p.id === c.parent_id) : null;
-                  const label = parent ? `${parent.name} › ${c.name}` : c.name;
-                  return { value: c.id, label };
+                  return { value: c.id, label: parent ? `${parent.name} › ${c.name}` : c.name };
                 }) || []}
                 placeholder="Select category"
                 {...register('category_id')}
               />
-
               <Select
                 label="Payment Method *"
                 options={PAYMENT_METHODS.map((m) => ({ value: m.value, label: `${m.icon} ${m.label}` }))}
@@ -396,20 +407,28 @@ export function ExpenseFormPage() {
             />
 
             <div className="flex items-center gap-4 pt-4">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => navigate(-1)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" isLoading={isSubmitting}>
+              <Button type="button" variant="secondary" onClick={() => navigate(-1)}>Cancel</Button>
+              <Button type="submit" isLoading={isSubmitting || checkDuplicate.isPending}>
                 {isEdit ? 'Save Changes' : 'Add Expense'}
               </Button>
             </div>
           </form>
         </CardContent>
       </Card>
+
+      {/* Duplicate Warning Modal */}
+      {duplicateExpense && (
+        <DuplicateWarningModal
+          isOpen={!!duplicateExpense}
+          existingExpense={duplicateExpense}
+          confidenceScore={1}
+          onKeepBoth={async () => {
+            setDuplicateExpense(null);
+            if (pendingData) await doSave(pendingData);
+          }}
+          onCancel={() => { setDuplicateExpense(null); setPendingData(null); }}
+        />
+      )}
     </div>
   );
 }

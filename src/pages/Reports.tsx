@@ -1,6 +1,7 @@
 import React from 'react';
 import { useAuthStore } from '@/stores/authStore';
 import { useMonthlySummary, useExpenses } from '@/hooks/useQueries';
+import { TextReveal } from '@/components/ui/cascade-text';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { formatCurrency } from '@/lib/utils';
@@ -101,8 +102,11 @@ export function ReportsPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Reports</h1>
-          <p className="text-foreground/60">Analyze your spending patterns</p>
+          <TextReveal
+            text="Reports"
+            subtitle="Analyze your spending patterns"
+            textSize="text-2xl"
+          />
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">

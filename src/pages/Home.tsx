@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
 import { useInView } from 'react-intersection-observer';
+import { TextReveal } from '@/components/ui/cascade-text';
 import {
   ArrowRight,
   CheckCircle2,
@@ -426,19 +427,12 @@ export function HomePage() {
               </div>
 
               <div className="space-y-5">
-                <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-6xl text-white leading-[1.1] font-sans">
-                  Take Control of{' '}
-                  <span className="shimmer-text bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent block mt-1">
-                    Every Rupee.
-                  </span>
-                  <span className="bg-gradient-to-r from-primary-400 via-primary-500 to-secondary-500 bg-clip-text text-transparent block mt-1">
-                    Smarter Expense Tracking
-                  </span>{' '}
-                  for Individuals and Families.
-                </h1>
-                <p className="max-w-xl text-base leading-relaxed text-slate-400 sm:text-lg">
-                  Consolidate your transaction records, coordinate family spending, and visualize automated insights under a sleek, glassmorphic SaaS interface.
-                </p>
+                <TextReveal
+                  text="Smart Expense Management"
+                  subtitle="Consolidate your transaction records, coordinate family spending, and visualize automated insights under a sleek, glassmorphic SaaS interface."
+                  textSize="text-4xl sm:text-5xl lg:text-6xl"
+                  variant="gradient"
+                />
               </div>
 
               {/* CTA Buttons */}

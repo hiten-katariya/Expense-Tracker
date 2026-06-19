@@ -1,6 +1,7 @@
 import React from 'react';
 import { useAuthStore } from '@/stores/authStore';
 import { useBudgets, useCategories, useCreateBudget, useExpenses } from '@/hooks/useQueries';
+import { TextReveal } from '@/components/ui/cascade-text';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Input, Select } from '@/components/Input';
@@ -87,8 +88,11 @@ export function BudgetsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Budgets</h1>
-          <p className="text-foreground/60">Set spending limits and track your progress</p>
+          <TextReveal
+            text="Budget Tracking"
+            subtitle="Set spending limits and track your progress"
+            textSize="text-2xl"
+          />
         </div>
         <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setIsModalOpen(true)}>
           Add Budget

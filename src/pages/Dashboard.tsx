@@ -2,254 +2,370 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuthStore } from '@/stores/authStore';
 import { useMonthlySummary, useExpenses, useCategories } from '@/hooks/useQueries';
-import { Card, CardContent, CardHeader, CardTitle, StatCard } from '@/components/Card';
+import { TextReveal } from '@/components/ui/cascade-text';
 import { Button } from '@/components/Button';
 import { StatCardSkeleton, ExpenseRowSkeleton } from '@/components/Skeleton';
 import { formatCurrency, formatDate } from '@/lib/utils';
-import { Plus, TrendingUp, TrendingDown, Wallet, CircleAlert as AlertCircle, ArrowRight, Layers } from 'lucide-react';
+import { Plus, TrendingUp, TrendingDown, Wallet, Layers, ArrowRight, Sparkles, Activity, Target } from 'lucide-react';
 import {
   Tooltip as RechartsTooltip,
   ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
+  PieChart, Pie, Cell,
+  AreaChart, Area, XAxis, YAxis, CartesianGrid,
 } from 'recharts';
-
 import { useUIStore } from '@/stores/uiStore';
 import { CategoryIcon } from './Categories';
 
-const COLORS = ['#6366F1', '#06B6D4', '#EC4899', '#F59E0B', '#10B981', '#8B5CF6', '#14B8A6', '#3B82F6', '#64748B'];
+const COLORS = ['#6366F1', '#06B6D4', '#EC4899', '#F59E0B', '#10B981', '#8B5CF6', '#14B8A6'];
+
+const fadeUp = {
+  hidden: { opacity: 0, y: 28 },
+  show: (i: number) => ({
+    opacity: 1, y: 0,
+    transition: { duration: 0.5, delay: i * 0.07, ease: [0.22, 1, 0.36, 1] as [number,number,number,number] },
+  }),
+};
+
+function PremiumStatCard({
+  title, value, subtitle, icon, gradient, trend, trendValue, delay = 0,
+}: {
+  title: string; value: string | number; subtitle?: string;
+  icon: React.ReactNode; gradient: string; trend?: 'up' | 'down';
+  trendValue?: string; delay?: number;
+}) {
+  return (
+    <motion.div
+      custom={delay}
+      initial="hidden"
+      animate="show"
+      variants={fadeUp}
+      whileHover={{ y: -4, transition: { duration: 0.2 } }}
+      className="relative overflow-hidden rounded-2xl border border-white/10 dark:border-white/8 bg-white/60 dark:bg-white/[0.03] backdrop-blur-xl shadow-glass group cursor-default"
+    >
+      {/* Gradient top accent */}
+      <div className={`absolute top-0 left-0 right-0 h-0.5 ${gradient}`} />
+      {/* Background glow */}
+      <div className={`absolute -top-8 -right-8 h-28 w-28 rounded-full opacity-10 blur-2xl ${gradient} group-hover:opacity-20 transition-opacity duration-500`} />
+      <div className="relative p-6">
+        <div className="flex items-start justify-between mb-4">
+          <div className={`h-11 w-11 rounded-xl flex items-center justify-center text-white ${gradient} shadow-lg`}>
+            {icon}
+          </div>
+          {trend && trendValue && (
+            <span className={`flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full ${
+              trend === 'up'
+                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                : 'bg-red-500/10 text-red-600 dark:text-red-400'
+            }`}>
+              {trend === 'up' ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+              {trendValue}
+            </span>
+          )}
+        </div>
+        <p className="text-2xl font-extrabold text-foreground tracking-tight">{value}</p>
+        <p className="text-sm font-semibold text-foreground/70 mt-0.5">{title}</p>
+        {subtitle && <p className="text-xs text-foreground/45 mt-1">{subtitle}</p>}
+      </div>
+    </motion.div>
+  );
+}
+
+// Sparkline-style mini area data for visual decoration
+function buildSparklineData(expenses: { expense_date: string; amount: number }[]) {
+  const map: Record<string, number> = {};
+  expenses.forEach((e) => {
+    const day = e.expense_date.slice(8, 10);
+    map[day] = (map[day] || 0) + e.amount;
+  });
+  return Object.entries(map)
+    .sort(([a], [b]) => Number(a) - Number(b))
+    .map(([day, amount]) => ({ day, amount }));
+}
 
 export function Dashboard() {
-  const { workspace } = useAuthStore();
+  const { workspace, profile } = useAuthStore();
   const { darkMode } = useUIStore();
   const workspaceId = workspace?.id;
   const currentMonth = new Date().getMonth();
   const currentYear = new Date().getFullYear();
 
-  const { data: summary, isLoading: summaryLoading } = useMonthlySummary(
-    workspaceId,
-    currentYear,
-    currentMonth
-  );
-
+  const { data: summary, isLoading: summaryLoading } = useMonthlySummary(workspaceId, currentYear, currentMonth);
   const { data: recentExpenses, isLoading: expensesLoading } = useExpenses(workspaceId, {}, 1, 5);
-
   const { data: categories } = useCategories(workspaceId);
+  const { data: allMonthExpenses } = useExpenses(workspaceId, {
+    date_from: `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`,
+    date_to: `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${new Date(currentYear, currentMonth + 1, 0).getDate()}`,
+  }, 1, 200);
+
+  const tooltipStyle = {
+    background: darkMode ? 'rgba(15,23,42,0.95)' : 'rgba(255,255,255,0.95)',
+    backdropFilter: 'blur(12px)',
+    border: darkMode ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0,0,0,0.08)',
+    borderRadius: '12px',
+    boxShadow: '0 10px 40px rgba(0,0,0,0.15)',
+    color: darkMode ? '#fff' : '#0f172a',
+    fontSize: '12px',
+    fontWeight: 600,
+  };
 
   if (summaryLoading || expensesLoading) {
     return (
       <div className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {[...Array(4)].map((_, i) => (
-            <StatCardSkeleton key={i} />
-          ))}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          {[...Array(4)].map((_, i) => <StatCardSkeleton key={i} />)}
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card><CardContent className="p-6"><ExpenseRowSkeleton /></CardContent></Card>
-          <Card><CardContent className="p-6"><ExpenseRowSkeleton /></CardContent></Card>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="glass-card p-6"><ExpenseRowSkeleton /></div>
+          <div className="glass-card p-6 lg:col-span-2"><ExpenseRowSkeleton /></div>
         </div>
       </div>
     );
   }
 
   const pieData = summary?.category_breakdown.slice(0, 6).map((cat) => ({
-    name: cat.category_name,
-    value: cat.total,
-    icon: cat.category_icon,
+    name: cat.category_name, value: cat.total, icon: cat.category_icon,
   })) || [];
 
+  const sparklineData = buildSparklineData(allMonthExpenses?.data || []);
+  const monthName = new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+
   return (
-    <div className="space-y-8">
-      {/* Title Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-8 pb-8">
+      {/* ── Header ── */}
+      <motion.div
+        initial={{ opacity: 0, y: -16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+      >
         <div>
-          <h1 className="text-3xl font-extrabold text-foreground tracking-tight">
-            Overview
-          </h1>
-          <p className="text-foreground/60 text-sm mt-1">Welcome back! Here's your spending overview for this month.</p>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary-500/10 border border-primary-500/20 text-xs font-bold text-primary-600 dark:text-primary-400">
+              <Sparkles className="h-3 w-3" /> {monthName}
+            </span>
+          </div>
+          <TextReveal
+            text={`Welcome back, ${profile?.full_name?.split(' ')[0] || 'there'} 👋`}
+            subtitle="Here's your financial snapshot for this month."
+            textSize="text-3xl"
+            variant="plain"
+          />
         </div>
         <Link to="/expenses/new" className="self-start sm:self-auto">
-          <Button leftIcon={<Plus className="h-4.5 w-4.5" />} className="shadow-[0_0_20px_rgba(99,102,241,0.25)]">
+          <Button leftIcon={<Plus className="h-4 w-4" />} className="shadow-[0_0_24px_rgba(99,102,241,0.3)] hover:shadow-[0_0_32px_rgba(99,102,241,0.45)]">
             Add Expense
           </Button>
         </Link>
-      </div>
+      </motion.div>
 
-      {/* Stats Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard
-          title="Total Spent This Month"
+      {/* ── Stat Cards ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        <PremiumStatCard
+          title="Total Spent"
           value={formatCurrency(summary?.total_spent || 0)}
-          subtitle={new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
+          subtitle={monthName}
           icon={<Wallet className="h-5 w-5" />}
+          gradient="bg-gradient-to-br from-primary-500 to-primary-700"
+          delay={0}
         />
-        <StatCard
+        <PremiumStatCard
           title="Daily Average"
           value={formatCurrency(summary?.daily_average || 0)}
-          subtitle="/ day"
-          icon={<TrendingUp className="h-5 w-5" />}
+          subtitle="per day this month"
+          icon={<Activity className="h-5 w-5" />}
+          gradient="bg-gradient-to-br from-secondary-500 to-secondary-600"
           trend="up"
           trendValue="4.2%"
+          delay={1}
         />
-        <StatCard
-          title="Projected Total"
+        <PremiumStatCard
+          title="Month Projection"
           value={formatCurrency(summary?.projected_total || 0)}
-          subtitle="End of month estimate"
-          icon={<TrendingDown className="h-5 w-5" />}
+          subtitle="estimated end-of-month"
+          icon={<TrendingUp className="h-5 w-5" />}
+          gradient="bg-gradient-to-br from-accent-pink to-accent-pink-dark"
           trend="down"
           trendValue="1.8%"
+          delay={2}
         />
-        <StatCard
+        <PremiumStatCard
           title="Categories"
           value={categories?.length || 0}
-          subtitle="Active categories"
+          subtitle="active this month"
           icon={<Layers className="h-5 w-5" />}
+          gradient="bg-gradient-to-br from-amber-500 to-amber-600"
+          delay={3}
         />
       </div>
 
-      {/* Charts section */}
+      {/* ── Charts Row ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Category Breakdown */}
-        <Card className="lg:col-span-1">
-          <CardHeader>
-            <CardTitle className="text-base font-bold text-foreground">Category Breakdown</CardTitle>
-          </CardHeader>
-          <CardContent className="px-2">
-            {pieData.length > 0 ? (
-              <div className="relative">
-                <ResponsiveContainer width="100%" height={230}>
-                  <PieChart>
-                    <Pie
-                      data={pieData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={85}
-                      paddingAngle={3}
-                      dataKey="value"
-                    >
-                      {pieData.map((_, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="rgba(30, 41, 59, 0.5)" strokeWidth={2} />
-                      ))}
-                    </Pie>
-                    <RechartsTooltip
-                      formatter={(value: number) => formatCurrency(value)}
-                      contentStyle={{
-                        background: darkMode ? 'rgba(15, 23, 42, 0.9)' : 'rgba(255, 255, 255, 0.9)',
-                        backdropFilter: 'blur(12px)',
-                        border: darkMode ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid rgba(0, 0, 0, 0.1)',
-                        borderRadius: '12px',
-                        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15)',
-                        color: darkMode ? '#fff' : '#0f172a',
-                      }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              <div className="h-56 flex items-center justify-center text-slate-500 text-sm">
-                No expenses recorded this month
-              </div>
-            )}
-            <div className="grid grid-cols-2 gap-2 mt-4 px-4">
-              {summary?.category_breakdown.slice(0, 4).map((cat, idx) => (
-                <div key={cat.category_id} className="flex items-center gap-2 text-xs">
-                  <span className="h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
-                  <span className="text-foreground/60 truncate max-w-[80px]">{cat.category_name}</span>
-                  <span className="ml-auto font-semibold text-foreground">
-                    {cat.percentage.toFixed(0)}%
-                  </span>
-                </div>
-              ))}
+        {/* Donut chart */}
+        <motion.div
+          custom={4}
+          initial="hidden"
+          animate="show"
+          variants={fadeUp}
+          className="glass-card p-6 lg:col-span-1"
+        >
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <h3 className="text-sm font-bold text-foreground">Category Breakdown</h3>
+              <p className="text-xs text-foreground/45 mt-0.5">By spending amount</p>
             </div>
-          </CardContent>
-        </Card>
-
-        {/* Spending Trend */}
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="text-base font-bold text-foreground">Spending Trend</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-64 flex items-center justify-center text-foreground/60">
-              <div className="text-center space-y-3">
-                <div className="h-12 w-12 rounded-full bg-foreground/5 border border-foreground/10 flex items-center justify-center mx-auto text-foreground/60">
-                  <AlertCircle className="h-6 w-6 opacity-60" />
-                </div>
-                <p className="text-sm font-medium">Add more expenses to reveal your custom trendlines</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Recent Expenses List */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-base font-bold text-foreground">Recent Expenses</CardTitle>
-          <Link to="/expenses" className="text-xs font-semibold text-primary-500 dark:text-primary-400 hover:text-primary-600 dark:hover:text-primary-300 flex items-center gap-1 transition-colors">
-            View all <ArrowRight className="h-4 w-4" />
-          </Link>
-        </CardHeader>
-        <CardContent className="p-0">
-          {recentExpenses && recentExpenses.data.length > 0 ? (
-            <div className="divide-y divide-foreground/5">
-              {recentExpenses.data.slice(0, 5).map((expense) => (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  whileInView={{ opacity: 1 }}
-                  viewport={{ once: true }}
-                  key={expense.id}
-                  className="flex items-center gap-4 py-4.5 px-6 hover:bg-foreground/[0.02] transition-colors duration-200"
-                >
-                  <div
-                    className="h-10 w-10 rounded-xl flex items-center justify-center text-white shrink-0"
-                    style={{ backgroundColor: expense.category?.color || '#95A5A6' }}
+            <Target className="h-4 w-4 text-primary-500/60" />
+          </div>
+          {pieData.length > 0 ? (
+            <>
+              <ResponsiveContainer width="100%" height={210}>
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={62}
+                    outerRadius={88}
+                    paddingAngle={3}
+                    dataKey="value"
+                    stroke="none"
                   >
-                    <CategoryIcon iconName={expense.category?.icon || 'Circle'} className="h-5 w-5" />
+                    {pieData.map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <RechartsTooltip
+                    formatter={(value: number) => [formatCurrency(value), '']}
+                    contentStyle={tooltipStyle}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="space-y-2 mt-3">
+                {summary?.category_breakdown.slice(0, 4).map((cat, idx) => (
+                  <div key={cat.category_id} className="flex items-center gap-2.5">
+                    <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
+                    <span className="text-xs text-foreground/60 flex-1 truncate">{cat.category_name}</span>
+                    <span className="text-xs font-bold text-foreground">{cat.percentage.toFixed(0)}%</span>
+                    <div className="w-16 h-1.5 rounded-full bg-foreground/10 overflow-hidden">
+                      <div className="h-full rounded-full" style={{ width: `${cat.percentage}%`, backgroundColor: COLORS[idx % COLORS.length] }} />
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-foreground truncate">
-                      {expense.title}
-                    </p>
-                    <p className="text-xs text-foreground/50 mt-0.5">
-                      {formatDate(expense.expense_date)}
-                    </p>
-                  </div>
-                  <div className="hidden sm:block">
-                    <span
-                      className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border border-foreground/5"
-                      style={{
-                        backgroundColor: `${expense.category?.color || '#95A5A6'}15`,
-                        color: expense.category?.color || '#95A5A6',
-                      }}
-                    >
-                      {expense.category ? (
-                        expense.category.parent_id && categories
-                          ? `${categories.find((p) => p.id === expense.category!.parent_id)?.name || ''} › ${expense.category.name}`
-                          : expense.category.name
-                      ) : 'Other'}
-                    </span>
-                  </div>
-                  <span className="text-sm font-bold text-foreground tabular-nums">
-                    {formatCurrency(expense.amount)}
-                  </span>
-                </motion.div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </>
           ) : (
-            <div className="py-16 text-center text-slate-500 space-y-4">
-              <p className="text-sm">No expenses recorded yet. Let's start tracking!</p>
-              <Link to="/expenses/new">
-                <Button variant="secondary" size="sm">
-                  Add Expense
-                </Button>
-              </Link>
+            <div className="h-56 flex flex-col items-center justify-center text-foreground/40 space-y-3">
+              <div className="h-14 w-14 rounded-2xl bg-primary-500/10 flex items-center justify-center">
+                <Target className="h-7 w-7 text-primary-500/50" />
+              </div>
+              <p className="text-sm font-medium text-center">No spending data yet<br /><span className="text-xs font-normal">Add an expense to see breakdown</span></p>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </motion.div>
+
+        {/* Spending trend area chart */}
+        <motion.div
+          custom={5}
+          initial="hidden"
+          animate="show"
+          variants={fadeUp}
+          className="glass-card p-6 lg:col-span-2"
+        >
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <h3 className="text-sm font-bold text-foreground">Spending Trend</h3>
+              <p className="text-xs text-foreground/45 mt-0.5">Daily total — {monthName}</p>
+            </div>
+            <Activity className="h-4 w-4 text-primary-500/60" />
+          </div>
+          {sparklineData.length > 1 ? (
+            <ResponsiveContainer width="100%" height={220}>
+              <AreaChart data={sparklineData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="spendGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#6366F1" stopOpacity={0.3} />
+                    <stop offset="100%" stopColor="#6366F1" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)'} vertical={false} />
+                <XAxis dataKey="day" tick={{ fontSize: 10, fill: darkMode ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: darkMode ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)' }} axisLine={false} tickLine={false} tickFormatter={(v) => `₹${v >= 1000 ? `${(v/1000).toFixed(0)}k` : v}`} />
+                <RechartsTooltip
+                  formatter={(value: number) => [formatCurrency(value), 'Spent']}
+                  contentStyle={tooltipStyle}
+                  cursor={{ stroke: 'rgba(99,102,241,0.2)', strokeWidth: 2 }}
+                />
+                <Area type="monotone" dataKey="amount" stroke="#6366F1" strokeWidth={2.5} fill="url(#spendGrad)" dot={false} activeDot={{ r: 5, fill: '#6366F1', strokeWidth: 0 }} />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-56 flex flex-col items-center justify-center text-foreground/40 space-y-3">
+              <div className="h-14 w-14 rounded-2xl bg-primary-500/8 flex items-center justify-center">
+                <Activity className="h-7 w-7 text-primary-500/50" />
+              </div>
+              <p className="text-sm font-medium text-center">Not enough data yet<br /><span className="text-xs font-normal">Add more expenses to unlock trend charts</span></p>
+            </div>
+          )}
+        </motion.div>
+      </div>
+
+      {/* ── Recent Expenses ── */}
+      <motion.div custom={6} initial="hidden" animate="show" variants={fadeUp} className="glass-card overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-foreground/5">
+          <div>
+            <h3 className="text-sm font-bold text-foreground">Recent Expenses</h3>
+            <p className="text-xs text-foreground/45 mt-0.5">Latest transactions</p>
+          </div>
+          <Link to="/expenses" className="flex items-center gap-1 text-xs font-bold text-primary-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors group">
+            View all <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
+          </Link>
+        </div>
+        {recentExpenses && recentExpenses.data.length > 0 ? (
+          <div className="divide-y divide-foreground/5">
+            {recentExpenses.data.slice(0, 5).map((expense, idx) => (
+              <motion.div
+                key={expense.id}
+                initial={{ opacity: 0, x: -12 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: idx * 0.06 + 0.3, duration: 0.4 }}
+                className="flex items-center gap-4 py-4 px-6 hover:bg-foreground/[0.02] transition-colors duration-200 group"
+              >
+                <div
+                  className="h-10 w-10 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
+                  style={{ backgroundColor: expense.category?.color || '#6366F1' }}
+                >
+                  <CategoryIcon iconName={expense.category?.icon || 'Circle'} className="h-5 w-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-foreground truncate">{expense.title}</p>
+                  <p className="text-xs text-foreground/50 mt-0.5 flex items-center gap-1.5">
+                    {formatDate(expense.expense_date)}
+                    {expense.category && (
+                      <>
+                        <span className="w-1 h-1 rounded-full bg-foreground/25 inline-block" />
+                        <span style={{ color: expense.category.color || undefined }}>{expense.category.name}</span>
+                      </>
+                    )}
+                  </p>
+                </div>
+                <span className="text-sm font-bold text-foreground tabular-nums">{formatCurrency(expense.amount)}</span>
+              </motion.div>
+            ))}
+          </div>
+        ) : (
+          <div className="py-16 text-center space-y-4">
+            <div className="h-14 w-14 rounded-2xl bg-foreground/5 flex items-center justify-center mx-auto">
+              <Wallet className="h-7 w-7 text-foreground/25" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground/60">No expenses yet</p>
+              <p className="text-xs text-foreground/40 mt-1">Start tracking to see your spending here</p>
+            </div>
+            <Link to="/expenses/new">
+              <Button variant="secondary" size="sm" leftIcon={<Plus className="h-4 w-4" />}>Add First Expense</Button>
+            </Link>
+          </div>
+        )}
+      </motion.div>
     </div>
   );
 }

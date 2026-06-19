@@ -117,9 +117,17 @@ export function useExpenses(
     date_from?: string;
     date_to?: string;
     payment_method?: string;
+    amount_min?: number;
+    amount_max?: number;
     search?: string;
     expense_scope?: 'personal' | 'family';
     family_id?: string;
+    is_recurring?: boolean;
+    import_source?: 'manual' | 'csv' | 'ai';
+    has_notes?: boolean;
+    has_ai_categorized?: boolean;
+    sort_field?: string;
+    sort_dir?: 'asc' | 'desc';
   },
   page: number = 1,
   pageSize: number = 20
@@ -135,34 +143,28 @@ export function useExpenses(
         .eq('workspace_id', workspaceId)
         .eq('is_deleted', false);
 
-      if (filters?.category_id) {
-        query = query.eq('category_id', filters.category_id);
-      }
-      if (filters?.date_from) {
-        query = query.gte('expense_date', filters.date_from);
-      }
-      if (filters?.date_to) {
-        query = query.lte('expense_date', filters.date_to);
-      }
-      if (filters?.payment_method) {
-        query = query.eq('payment_method', filters.payment_method);
-      }
-      if (filters?.expense_scope) {
-        query = query.eq('expense_scope', filters.expense_scope);
-      }
-      if (filters?.family_id) {
-        query = query.eq('family_id', filters.family_id);
-      }
+      if (filters?.category_id) query = query.eq('category_id', filters.category_id);
+      if (filters?.date_from)   query = query.gte('expense_date', filters.date_from);
+      if (filters?.date_to)     query = query.lte('expense_date', filters.date_to);
+      if (filters?.payment_method) query = query.eq('payment_method', filters.payment_method);
+      if (filters?.amount_min != null) query = query.gte('amount', filters.amount_min);
+      if (filters?.amount_max != null) query = query.lte('amount', filters.amount_max);
+      if (filters?.expense_scope) query = query.eq('expense_scope', filters.expense_scope);
+      if (filters?.family_id)   query = query.eq('family_id', filters.family_id);
+      if (filters?.is_recurring != null) query = query.eq('is_recurring', filters.is_recurring);
+      if (filters?.import_source) query = query.eq('import_source', filters.import_source);
+      if (filters?.has_notes)   query = query.not('notes', 'is', null);
+      if (filters?.has_ai_categorized) query = query.not('ai_category_suggestion', 'is', null);
       if (filters?.search) {
         query = query.or(`title.ilike.%${filters.search}%,notes.ilike.%${filters.search}%`);
       }
 
+      const sortField = filters?.sort_field || 'expense_date';
+      const sortDir   = filters?.sort_dir   || 'desc';
       const from = (page - 1) * pageSize;
-      const to = from + pageSize - 1;
+      const to   = from + pageSize - 1;
 
-      query = query
-        .order('expense_date', { ascending: false })
-        .range(from, to);
+      query = query.order(sortField, { ascending: sortDir === 'asc' }).range(from, to);
 
       const { data, error, count } = await query;
       if (error) throw error;
@@ -342,6 +344,154 @@ export function useDeleteExpense() {
         .update({ is_deleted: true, deleted_at: new Date().toISOString() })
         .eq('id', id);
       if (error) throw error;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['expenses', variables.workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ['trash', variables.workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ['monthly-summary'] });
+    },
+  });
+}
+
+export function useTrashedExpenses(workspaceId: string | undefined) {
+  return useQuery({
+    queryKey: ['trash', workspaceId],
+    queryFn: async () => {
+      if (!workspaceId) return [];
+      const { data, error } = await supabase
+        .from('expenses')
+        .select('*, category:categories(*)')
+        .eq('workspace_id', workspaceId)
+        .eq('is_deleted', true)
+        .order('deleted_at', { ascending: false });
+      if (error) throw error;
+      return data as Expense[];
+    },
+    enabled: !!workspaceId,
+  });
+}
+
+export function useRestoreExpense() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, workspaceId }: { id: string; workspaceId: string }) => {
+      const { error } = await supabase
+        .from('expenses')
+        .update({ is_deleted: false, deleted_at: null })
+        .eq('id', id);
+      if (error) throw error;
+      return { workspaceId };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['expenses', result.workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ['trash', result.workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ['monthly-summary'] });
+    },
+  });
+}
+
+export function usePermanentDeleteExpense() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, workspaceId }: { id: string; workspaceId: string }) => {
+      const { error } = await supabase
+        .from('expenses')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      return { workspaceId };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['trash', result.workspaceId] });
+    },
+  });
+}
+
+export function useBulkRestore() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ ids, workspaceId }: { ids: string[]; workspaceId: string }) => {
+      const { error } = await supabase
+        .from('expenses')
+        .update({ is_deleted: false, deleted_at: null })
+        .in('id', ids);
+      if (error) throw error;
+      return { workspaceId };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['expenses', result.workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ['trash', result.workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ['monthly-summary'] });
+    },
+  });
+}
+
+export function useBulkPermanentDelete() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ ids, workspaceId }: { ids: string[]; workspaceId: string }) => {
+      const { error } = await supabase
+        .from('expenses')
+        .delete()
+        .in('id', ids);
+      if (error) throw error;
+      return { workspaceId };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['trash', result.workspaceId] });
+    },
+  });
+}
+
+export function useCheckDuplicateExpense(workspaceId: string | undefined) {
+  return useMutation({
+    mutationFn: async ({
+      title, amount, expense_date, category_id,
+    }: { title: string; amount: number; expense_date: string; category_id?: string | null }) => {
+      if (!workspaceId) return null;
+      let query = supabase
+        .from('expenses')
+        .select('*, category:categories(*)')
+        .eq('workspace_id', workspaceId)
+        .eq('is_deleted', false)
+        .eq('amount', amount)
+        .eq('expense_date', expense_date)
+        .ilike('title', title.trim());
+      if (category_id) query = query.eq('category_id', category_id);
+      const { data, error } = await query.limit(1).maybeSingle();
+      if (error) throw error;
+      return data as Expense | null;
+    },
+  });
+}
+
+export function useImportExpenses() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      rows, workspaceId, userId,
+    }: { rows: Partial<Expense>[]; workspaceId: string; userId: string }) => {
+      const batchId = crypto.randomUUID();
+      const BATCH_SIZE = 50;
+      const results = { imported: 0, failed: 0, failedRows: [] as Partial<Expense>[] };
+
+      for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+        const batch = rows.slice(i, i + BATCH_SIZE).map((r) => ({
+          ...r,
+          workspace_id: workspaceId,
+          user_id: userId,
+          import_source: 'csv' as const,
+          import_batch_id: batchId,
+        }));
+        const { error } = await supabase.from('expenses').insert(batch);
+        if (error) {
+          results.failed += batch.length;
+          results.failedRows.push(...batch);
+        } else {
+          results.imported += batch.length;
+        }
+      }
+      return { ...results, batchId };
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['expenses', variables.workspaceId] });

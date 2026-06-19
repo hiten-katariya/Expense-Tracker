@@ -80,6 +80,8 @@ export interface Expense {
   is_flagged: boolean;
   is_deleted: boolean;
   deleted_at: string | null;
+  import_source: 'manual' | 'csv' | 'ai' | null;
+  import_batch_id: string | null;
   created_at: string;
   updated_at: string;
   category?: Category;
@@ -184,6 +186,32 @@ export interface ExpenseFilters {
   tags?: string[];
   search?: string;
   expense_scope?: 'personal' | 'family';
+  is_recurring?: boolean;
+  import_source?: 'manual' | 'csv' | 'ai';
+  has_notes?: boolean;
+  has_ai_categorized?: boolean;
+}
+
+export interface FilterPreset {
+  id: string;
+  name: string;
+  filters: ExpenseFilters;
+  createdAt: string;
+}
+
+export interface ImportedRow {
+  _rowIndex: number;
+  title: string;
+  amount: number;
+  expense_date: string;
+  category_id?: string | null;
+  payment_method?: string;
+  notes?: string | null;
+  tags?: string[];
+  _valid: boolean;
+  _errors: string[];
+  _duplicateScore: number;
+  _skip: boolean;
 }
 
 export type SortDirection = 'asc' | 'desc';

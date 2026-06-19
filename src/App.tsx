@@ -18,6 +18,8 @@ import { BudgetsPage } from '@/pages/Budgets';
 import { ReportsPage } from '@/pages/Reports';
 import { FamilyPage } from '@/pages/Family';
 import { SettingsPage } from '@/pages/Settings';
+import { TrashPage } from '@/pages/Trash';
+import { CsvImportPage } from '@/pages/CsvImport';
 import OnboardingPage from '@/pages/Onboarding';
 import VerifyEmailPage from '@/pages/VerifyEmail';
 
@@ -228,6 +230,27 @@ function AppRoutes() {
           <ProtectedRoute>
             <Layout>
               <SettingsPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/trash"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <TrashPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/expenses/import"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <CsvImportPage />
             </Layout>
           </ProtectedRoute>
         }

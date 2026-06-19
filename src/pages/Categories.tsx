@@ -1,6 +1,7 @@
 import React from 'react';
 import { useAuthStore } from '@/stores/authStore';
 import { useCategories, useCreateCategory, useUpdateCategory, useDeleteCategory } from '@/hooks/useQueries';
+import { TextReveal } from '@/components/ui/cascade-text';
 import { Card, CardContent } from '@/components/Card';
 import { Button, IconButton } from '@/components/Button';
 import { Input, Select } from '@/components/Input';
@@ -188,8 +189,11 @@ export function CategoriesPage() {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Categories</h1>
-          <p className="text-foreground/60">Manage your expense categories and budgets</p>
+          <TextReveal
+            text="Categories"
+            subtitle="Manage your expense categories and budgets"
+            textSize="text-2xl"
+          />
         </div>
         <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => openModal()}>
           Add Category
