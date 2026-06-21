@@ -294,7 +294,7 @@ export function CategoriesPage() {
       )}
 
       {/* Category Form Modal */}
-      <Modal isOpen={isModalOpen} onClose={closeModal} title={editingCategory ? 'Edit Category' : 'Add Category'} size="md">
+      <Modal isOpen={isModalOpen} onClose={closeModal} title={editingCategory ? 'Edit Category' : 'Add Category'} size="lg">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
           <Input
             label="Category Name *"
@@ -312,7 +312,7 @@ export function CategoriesPage() {
 
           <div>
             <label className="block text-sm font-medium text-foreground/80 mb-2">Suggested Icons *</label>
-            <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 p-2 bg-card/60 border border-foreground/10 rounded-xl mb-3">
+            <div className="grid grid-cols-5 sm:grid-cols-7 md:grid-cols-8 gap-2 p-2 bg-card/60 border border-foreground/10 rounded-xl mb-3">
               {LUCIDE_ICONS_LIST.map((iconItem) => (
                 <button
                   key={iconItem.name}
@@ -353,8 +353,8 @@ export function CategoriesPage() {
                   key={color}
                   type="button"
                   onClick={() => setValue('color', color)}
-                  className={`h-8 w-8 rounded-full transition-all ${
-                    watchColor === color ? 'ring-2 ring-offset-2 ring-primary-500 scale-110' : 'opacity-80 hover:opacity-100'
+                  className={`h-8 w-8 rounded-full border-2 transition-all ${
+                    watchColor === color ? 'ring-2 ring-offset-2 ring-primary-500 scale-110 border-primary-500' : 'border-transparent opacity-80 hover:opacity-100 hover:scale-105'
                   }`}
                   style={{ backgroundColor: color }}
                 />

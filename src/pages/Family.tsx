@@ -1,6 +1,7 @@
 import React from 'react';
 import { useAuthStore } from '@/stores/authStore';
 import { useFamilies, useFamilyMembers, useCreateFamily } from '@/hooks/useQueries';
+import { TextReveal } from '@/components/ui/cascade-text';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/Card';
 import { Button, IconButton } from '@/components/Button';
 import { Input } from '@/components/Input';
@@ -113,8 +114,11 @@ export function FamilyPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Family</h1>
-          <p className="text-foreground/60">Manage family groups and shared expenses</p>
+          <TextReveal
+            text="Family"
+            subtitle="Manage family groups and shared expenses"
+            textSize="text-2xl"
+          />
         </div>
         {!currentFamily && (
           <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setIsCreateModalOpen(true)}>

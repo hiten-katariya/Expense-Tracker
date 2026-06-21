@@ -93,12 +93,12 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-screen bg-bg-dark text-slate-100 flex items-center justify-center p-4 relative overflow-hidden">
       {/* Background patterns */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-        <div className="absolute inset-0 grid-bg opacity-[0.05] dark:opacity-[0.15]" />
-        <div className="absolute -top-[10%] -left-[10%] h-[600px] w-[600px] rounded-full bg-gradient-to-tr from-primary-600 to-purple-700 opacity-[0.1] dark:opacity-[0.25] blur-[120px] blob-animate-1" />
-        <div className="absolute bottom-[-10%] right-[-10%] h-[600px] w-[600px] rounded-full bg-gradient-to-tr from-[#3B82F6] to-secondary-500 opacity-[0.08] dark:opacity-[0.2] blur-[120px] blob-animate-2" />
+        <div className="absolute inset-0 grid-bg opacity-[0.15]" />
+        <div className="absolute -top-[10%] -left-[10%] h-[600px] w-[600px] rounded-full bg-gradient-to-tr from-primary-600 to-purple-700 opacity-[0.25] blur-[120px] blob-animate-1" />
+        <div className="absolute bottom-[-10%] right-[-10%] h-[600px] w-[600px] rounded-full bg-gradient-to-tr from-[#3B82F6] to-secondary-500 opacity-[0.2] blur-[120px] blob-animate-2" />
       </div>
 
       {/* Main card */}
@@ -108,24 +108,24 @@ export function LoginPage() {
         transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
         className="w-full max-w-md z-10"
       >
-        <Card className="w-full bg-card/45 backdrop-blur-2xl border-foreground/10 shadow-2xl relative overflow-hidden group">
+        <Card className="w-full bg-bg-card/45 backdrop-blur-2xl border-white/5 shadow-2xl relative overflow-hidden group">
           <div className="absolute -top-10 -right-10 h-32 w-32 rounded-full bg-primary-500/5 blur-2xl pointer-events-none" />
 
           <CardHeader className="pb-4 border-b-0">
             <div className="mb-4">
               <Link
                 to="/"
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-foreground/60 hover:text-foreground transition-colors"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
               >
                 <ArrowLeft className="h-3.5 w-3.5" />
                 Back to Home
               </Link>
             </div>
             <div className="text-center">
-              <CardTitle className="text-2xl font-extrabold text-foreground">
+              <CardTitle className="text-2xl font-extrabold bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent">
                 Welcome Back
               </CardTitle>
-              <CardDescription className="text-foreground/60 mt-1">
+              <CardDescription className="text-slate-400 mt-1">
                 Sign in to your dashboard to continue
               </CardDescription>
             </div>
@@ -165,10 +165,10 @@ export function LoginPage() {
 
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-foreground/10" />
+                <div className="w-full border-t border-white/5" />
               </div>
               <div className="relative flex justify-center text-xs uppercase tracking-wider">
-                <span className="bg-card px-3 text-foreground/60 font-semibold">Or continue with</span>
+                <span className="bg-bg-card/80 px-3 text-slate-500 font-semibold">Or continue with</span>
               </div>
             </div>
 
@@ -211,9 +211,9 @@ export function LoginPage() {
               </Button>
             </div>
 
-            <p className="text-center text-sm text-foreground/60 mt-2">
+            <p className="text-center text-sm text-slate-400 mt-2">
               Don't have an account?{' '}
-              <Link to="/register" className="font-semibold text-primary-500 dark:text-primary-400 hover:text-primary-600 dark:hover:text-primary-300 transition-colors">
+              <Link to="/register" className="font-semibold text-primary-400 hover:text-primary-300 transition-colors">
                 Sign up
               </Link>
             </p>
@@ -252,8 +252,7 @@ export function RegisterPage() {
   const onSubmit = async (data: RegisterFormData) => {
     setIsLoading(true);
     try {
-      // 1. Sign up the user via Supabase
-      const { data: authData, error } = await supabase.auth.signUp({
+      const { error } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
         options: {
@@ -268,14 +267,12 @@ export function RegisterPage() {
         },
       });
       if (error) throw error;
-      if (!authData.user) throw new Error('User creation failed');
-
       addNotification({
         type: 'success',
         title: 'Account created!',
-        message: 'A confirmation link has been sent to your email address.',
+        message: 'Please check your email to verify your account.',
       });
-      navigate('/onboarding');
+      navigate('/login');
     } catch (error) {
       addNotification({
         type: 'error',
@@ -322,12 +319,12 @@ export function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-screen bg-bg-dark text-slate-100 flex items-center justify-center p-4 relative overflow-hidden">
       {/* Background patterns */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-        <div className="absolute inset-0 grid-bg opacity-[0.05] dark:opacity-[0.15]" />
-        <div className="absolute -top-[10%] -left-[10%] h-[600px] w-[600px] rounded-full bg-gradient-to-tr from-primary-600 to-purple-700 opacity-[0.1] dark:opacity-[0.25] blur-[120px] blob-animate-1" />
-        <div className="absolute bottom-[-10%] right-[-10%] h-[600px] w-[600px] rounded-full bg-gradient-to-tr from-[#3B82F6] to-secondary-500 opacity-[0.08] dark:opacity-[0.2] blur-[120px] blob-animate-2" />
+        <div className="absolute inset-0 grid-bg opacity-[0.15]" />
+        <div className="absolute -top-[10%] -left-[10%] h-[600px] w-[600px] rounded-full bg-gradient-to-tr from-primary-600 to-purple-700 opacity-[0.25] blur-[120px] blob-animate-1" />
+        <div className="absolute bottom-[-10%] right-[-10%] h-[600px] w-[600px] rounded-full bg-gradient-to-tr from-[#3B82F6] to-secondary-500 opacity-[0.2] blur-[120px] blob-animate-2" />
       </div>
 
       {/* Main card */}
@@ -337,24 +334,24 @@ export function RegisterPage() {
         transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
         className="w-full max-w-xl z-10"
       >
-        <Card className="w-full bg-card/45 backdrop-blur-2xl border-foreground/10 shadow-2xl relative overflow-hidden group">
+        <Card className="w-full bg-bg-card/45 backdrop-blur-2xl border-white/5 shadow-2xl relative overflow-hidden group">
           <div className="absolute -top-10 -right-10 h-32 w-32 rounded-full bg-primary-500/5 blur-2xl pointer-events-none" />
 
           <CardHeader className="pb-4 border-b-0">
             <div className="mb-4">
               <Link
                 to="/"
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-foreground/60 hover:text-foreground transition-colors"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
               >
                 <ArrowLeft className="h-3.5 w-3.5" />
                 Back to Home
               </Link>
             </div>
             <div className="text-center">
-              <CardTitle className="text-2xl font-extrabold text-foreground">
+              <CardTitle className="text-2xl font-extrabold bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent">
                 Create Account
               </CardTitle>
-              <CardDescription className="text-foreground/60 mt-1">
+              <CardDescription className="text-slate-400 mt-1">
                 Start managing your expenses cleanly today
               </CardDescription>
             </div>
@@ -371,15 +368,15 @@ export function RegisterPage() {
                 {...register('full_name')}
               />
               <div className="grid grid-cols-2 gap-4">
-              <Input
-                label="Email Address"
-                type="email"
-                placeholder="you@example.com"
-                error={errors.email?.message}
-                leftIcon={<Mail className="h-4.5 w-4.5 text-slate-500" />}
-                {...register('email')}
-              />
-              <Input
+                <Input
+                  label="Email Address"
+                  type="email"
+                  placeholder="you@example.com"
+                  error={errors.email?.message}
+                  leftIcon={<Mail className="h-4.5 w-4.5 text-slate-500" />}
+                  {...register('email')}
+                />
+                <Input
                   label="Phone Number"
                   type="tel"
                   placeholder="9876543210"
@@ -406,42 +403,6 @@ export function RegisterPage() {
                 }
                 {...register('password')}
               />
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  label="City"
-                  type="text"
-                  placeholder="Pune"
-                  error={errors.city?.message}
-                  leftIcon={<MapPin className="h-4.5 w-4.5 text-slate-500" />}
-                  {...register('city')}
-                />
-                <Input
-                  label="State"
-                  type="text"
-                  placeholder="Maharashtra"
-                  error={errors.state?.message}
-                  leftIcon={<MapPin className="h-4.5 w-4.5 text-slate-500" />}
-                  {...register('state')}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  label="Country"
-                  type="text"
-                  placeholder="India"
-                  error={errors.country?.message}
-                  leftIcon={<Globe className="h-4.5 w-4.5 text-slate-500" />}
-                  {...register('country')}
-                />
-                <Input
-                  label="Pincode"
-                  type="text"
-                  placeholder="411045"
-                  error={errors.pincode?.message}
-                  leftIcon={<MapPin className="h-4.5 w-4.5 text-slate-500" />}
-                  {...register('pincode')}
-                />
-              </div>
               <Button type="submit" className="w-full mt-2" disabled={isLoading}>
                 {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Create Account'}
               </Button>
@@ -449,10 +410,10 @@ export function RegisterPage() {
 
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-foreground/10" />
+                <div className="w-full border-t border-white/5" />
               </div>
               <div className="relative flex justify-center text-xs uppercase tracking-wider">
-                <span className="bg-card px-3 text-foreground/60 font-semibold">Or continue with</span>
+                <span className="bg-bg-card/80 px-3 text-slate-500 font-semibold">Or continue with</span>
               </div>
             </div>
 
@@ -495,9 +456,9 @@ export function RegisterPage() {
               </Button>
             </div>
 
-            <p className="text-center text-sm text-foreground/60 mt-2">
+            <p className="text-center text-sm text-slate-400 mt-2">
               Already have an account?{' '}
-              <Link to="/login" className="font-semibold text-primary-500 dark:text-primary-400 hover:text-primary-600 dark:hover:text-primary-300 transition-colors">
+              <Link to="/login" className="font-semibold text-primary-400 hover:text-primary-300 transition-colors">
                 Sign in
               </Link>
             </p>

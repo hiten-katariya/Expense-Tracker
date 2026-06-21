@@ -48,7 +48,7 @@ export interface TextRevealProps {
 // ─── Gradient definitions ────────────────────────────────────────────────────
 const VARIANT_CLASSES: Record<TextRevealVariant, string> = {
   gradient:
-    'bg-gradient-to-r from-primary-500 via-secondary-500 to-accent-pink bg-clip-text text-transparent animate-gradient-x',
+    'bg-clip-text text-transparent animate-gradient-x',
   glow:
     'text-foreground drop-shadow-[0_0_18px_rgba(99,102,241,0.55)]',
   split:
@@ -56,6 +56,12 @@ const VARIANT_CLASSES: Record<TextRevealVariant, string> = {
   plain:
     'text-foreground',
 };
+
+const GRADIENT_STYLE = {
+  backgroundImage:
+    'linear-gradient(90deg, #7c3aed, #6366f1, #3b82f6, #06b6d4, #10b981, #8b5cf6, #ec4899, #7c3aed)',
+  backgroundSize: '200% 200%',
+} as const;
 
 // ─── Per-character container: magnetic hover ─────────────────────────────────
 function MagneticChar({
@@ -101,7 +107,11 @@ function MagneticChar({
   return (
     <motion.span
       ref={ref}
-      style={{ x: springX, y: springY }}
+      style={{
+        x: springX,
+        y: springY,
+        ...(variant === 'gradient' ? GRADIENT_STYLE : {}),
+      }}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
       className={cn(

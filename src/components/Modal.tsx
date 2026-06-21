@@ -36,26 +36,28 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        onClick={onClose}
-      />
-      <div
-        className={cn(
-          'relative w-full bg-white rounded-2xl shadow-2xl animate-fade-in',
-          sizes[size]
-        )}
-      >
-        {title && (
-          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-            <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
-            <IconButton onClick={onClose} variant="ghost" size="sm">
-              <X className="h-4 w-4" />
-            </IconButton>
-          </div>
-        )}
-        <div className="p-6">{children}</div>
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex min-h-full items-start sm:items-center justify-center p-4">
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm"
+          onClick={onClose}
+        />
+        <div
+          className={cn(
+            'relative w-full bg-white dark:bg-card rounded-2xl shadow-2xl animate-fade-in flex flex-col max-h-[90vh]',
+            sizes[size]
+          )}
+        >
+          {title && (
+            <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-slate-100 dark:border-foreground/10 shrink-0">
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-foreground">{title}</h2>
+              <IconButton onClick={onClose} variant="ghost" size="sm">
+                <X className="h-4 w-4" />
+              </IconButton>
+            </div>
+          )}
+          <div className="p-5 sm:p-6 overflow-y-auto flex-1">{children}</div>
+        </div>
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { TextReveal } from '@/components/ui/cascade-text';
 import { useAuthStore } from '@/stores/authStore';
 import {
   useTrashedExpenses,
@@ -177,13 +178,11 @@ export function TrashPage() {
             </IconButton>
           </Link>
           <div>
-            <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-              <Trash2 className="h-6 w-6 text-foreground/40" />
-              Trash
-            </h1>
-            <p className="text-foreground/55 text-sm mt-0.5">
-              {trashedExpenses.length} deleted expense{trashedExpenses.length !== 1 ? 's' : ''}
-            </p>
+            <TextReveal
+              text="Trash"
+              subtitle={`${trashedExpenses.length} deleted expense${trashedExpenses.length !== 1 ? 's' : ''}`}
+              textSize="text-2xl"
+            />
           </div>
         </div>
       </div>
@@ -195,7 +194,7 @@ export function TrashPage() {
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
-            className="flex items-center gap-3 p-3 rounded-xl bg-primary-500/8 border border-primary-500/20"
+            className="flex items-center gap-3 p-3 rounded-xl bg-primary-500/10 border border-primary-500/20"
           >
             <span className="text-sm font-medium text-primary-600 dark:text-primary-400 flex-1">
               {selected.size} expense{selected.size !== 1 ? 's' : ''} selected

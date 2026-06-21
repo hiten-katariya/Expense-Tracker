@@ -69,6 +69,7 @@ export default {
         'grid-fade': 'gridFade 4s ease-in-out infinite',
         'spin-slow': 'spin 12s linear infinite',
         'shimmer': 'shimmerSlide 2.5s linear infinite',
+        'gradient-x': 'gradientX 4s ease infinite',
         // Aceternity gradient blob animations
         first: 'moveVertical 30s ease infinite',
         second: 'moveInCircle 20s reverse infinite',
@@ -124,6 +125,10 @@ export default {
           '0%': { transform: 'translateY(-50%)' },
           '50%': { transform: 'translateY(50%)' },
           '100%': { transform: 'translateY(-50%)' },
+        },
+        gradientX: {
+          '0%, 100%': { backgroundPosition: '0% 50%', backgroundSize: '200% 200%' },
+          '50%': { backgroundPosition: '100% 50%', backgroundSize: '200% 200%' },
         },
       },
     },
