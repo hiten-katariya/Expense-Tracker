@@ -57,6 +57,23 @@ export default function VerifyEmail() {
         // Refresh auth profile state to capture updated verification timestamp
         await refreshProfile();
 
+        // Write verification notification to user's notifications center
+        const latestUser = useAuthStore.getState().user;
+        const latestWorkspace = useAuthStore.getState().workspace;
+        if (latestUser?.id) {
+          const { supabase: supabaseClient } = await import('@/lib/supabase');
+          await supabaseClient
+            .from('notifications')
+            .insert({
+              user_id: latestUser.id,
+              workspace_id: latestWorkspace?.id || null,
+              type: 'verification',
+              title: 'Email Verified',
+              message: 'Your email address has been successfully verified.',
+              is_read: false
+            });
+        }
+
         // Redirect to onboarding in 3 seconds
         setTimeout(() => {
           navigate('/onboarding');

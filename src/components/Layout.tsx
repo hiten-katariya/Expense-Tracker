@@ -4,6 +4,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
 import { useUIStore } from '@/stores/uiStore';
+import { useNotifications } from '@/hooks/useQueries';
+import { useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase';
 import { LayoutDashboard, Receipt, FolderOpen, Target, ChartPie as PieChart, Settings, Users, LogOut, Menu, X, Bell, Search, Sun, Moon, Trash2 } from 'lucide-react';
 import { IconButton } from './Button';
 
@@ -13,15 +16,71 @@ const navItems = [
   { path: '/categories', icon: FolderOpen, label: 'Categories' },
   { path: '/budgets', icon: Target, label: 'Budgets' },
   { path: '/reports', icon: PieChart, label: 'Reports' },
+  { path: '/notifications', icon: Bell, label: 'Notifications' },
   { path: '/family', icon: Users, label: 'Family' },
   { path: '/trash', icon: Trash2, label: 'Trash' },
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const { profile, signOut } = useAuthStore();
+  const { user, profile, workspace, signOut } = useAuthStore();
   const { darkMode, toggleDarkMode } = useUIStore();
   const [sidebarOpen, setSidebarOpen] = React.useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+
+  const { data: notifications } = useNotifications(user?.id);
+  const unreadCount = notifications?.filter((n) => !n.is_read).length || 0;
+  const queryClient = useQueryClient();
+
+  const workspaceId = workspace?.id;
+
+  React.useEffect(() => {
+    if (!user?.id) return;
+    const channel = supabase
+      .channel('realtime-notifications')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['notifications', user.id] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, queryClient]);
+
+  React.useEffect(() => {
+    if (!workspaceId) return;
+    const channel = supabase
+      .channel('realtime-expenses')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'expenses',
+          filter: `workspace_id=eq.${workspaceId}`,
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['expenses'] });
+          queryClient.invalidateQueries({ queryKey: ['monthly-summary'] });
+          queryClient.invalidateQueries({ queryKey: ['budgets'] });
+          queryClient.invalidateQueries({ queryKey: ['trash'] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [workspaceId, queryClient]);
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col lg:flex-row relative">
@@ -96,22 +155,32 @@ export function Layout({ children }: { children: React.ReactNode }) {
                       className="absolute inset-0 bg-gradient-to-r from-primary-500/15 to-primary-600/10 border border-primary-500/25 rounded-xl z-0 shadow-[0_0_20px_rgba(99,102,241,0.12)]"
                     />
                   )}
-                  <item.icon className={cn(
-                    "h-5 w-5 flex-shrink-0 z-10 transition-all duration-300",
-                    isActive ? "text-white" : "text-foreground/50 group-hover:text-foreground"
-                  )} />
+                  <div className="relative z-10 flex items-center justify-center">
+                    <item.icon className={cn(
+                      "h-5 w-5 flex-shrink-0 transition-all duration-300",
+                      isActive ? "text-white" : "text-foreground/50 group-hover:text-foreground"
+                    )} />
+                    {item.path === '/notifications' && unreadCount > 0 && !sidebarOpen && (
+                      <span className="absolute -top-1 -right-1 h-2.5 w-2.5 bg-gradient-to-r from-rose-500 to-red-600 rounded-full border border-card" />
+                    )}
+                  </div>
                   <AnimatePresence>
                     {sidebarOpen && (
                       <motion.span
                         initial={{ opacity: 0, x: -5 }}
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: -5 }}
-                      className={cn(
-                          "z-10 transition-colors duration-300 text-sm",
+                        className={cn(
+                          "z-10 transition-colors duration-300 text-sm flex-1 flex items-center justify-between",
                           isActive ? "text-primary-600 dark:text-white font-semibold" : "text-foreground/60 group-hover:text-foreground"
                         )}
                       >
-                        {item.label}
+                        <span>{item.label}</span>
+                        {item.path === '/notifications' && unreadCount > 0 && (
+                          <span className="ml-2 bg-gradient-to-r from-rose-500 to-red-600 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full shadow-sm">
+                            {unreadCount}
+                          </span>
+                        )}
                       </motion.span>
                     )}
                   </AnimatePresence>
@@ -176,9 +245,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
           >
             {darkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
           </IconButton>
-          <IconButton className="text-foreground/80">
-            <Bell className="h-5 w-5" />
-          </IconButton>
+          <Link to="/notifications" className="relative">
+            <IconButton className="text-foreground/80 p-2">
+              <Bell className="h-5 w-5" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 h-5 w-5 bg-gradient-to-r from-rose-500 to-red-600 rounded-full text-[9px] font-black text-white flex items-center justify-center border border-card shadow-sm">
+                  {unreadCount}
+                </span>
+              )}
+            </IconButton>
+          </Link>
           <Link to="/settings" className="h-8 w-8 block rounded-xl bg-gradient-to-tr from-primary-500 to-secondary-500 p-[1.5px] shadow-[0_0_10px_rgba(99,102,241,0.2)] hover:shadow-[0_0_15px_rgba(99,102,241,0.3)] transition-all duration-300 cursor-pointer">
             <div className="h-full w-full rounded-[9px] bg-card flex items-center justify-center text-foreground font-extrabold text-xs border border-foreground/10">
               {profile?.full_name?.charAt(0).toUpperCase() || profile?.email?.charAt(0).toUpperCase()}
@@ -299,10 +375,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 {darkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
               </IconButton>
 
-              <IconButton className="text-foreground/60 hover:bg-foreground/5 relative p-2 rounded-xl">
-                <Bell className="h-5 w-5" />
-                <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-gradient-to-r from-primary-500 to-secondary-500 rounded-full" />
-              </IconButton>
+              <Link to="/notifications" className="relative">
+                <IconButton className="text-foreground/60 hover:bg-foreground/5 p-2 rounded-xl">
+                  <Bell className="h-5 w-5" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 h-5 w-5 bg-gradient-to-r from-rose-500 to-red-600 rounded-full text-[9px] font-black text-white flex items-center justify-center border-2 border-card shadow-sm">
+                      {unreadCount}
+                    </span>
+                  )}
+                </IconButton>
+              </Link>
 
               <div className="h-8 w-px bg-foreground/10" />
 

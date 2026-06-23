@@ -597,24 +597,36 @@ export async function handleAuthStateChange(event: string, session: any) {
 
   if (event === 'SIGNED_IN' && session?.user) {
     const user = session.user;
-    const { isInitialized, setUser, setProfile, setWorkspace } = useAuthStore.getState();
-    setUser(user);
+    const { user: currentUser, setUser, setProfile, setWorkspace } = useAuthStore.getState();
 
-    // If initialize() already ran (isInitialized=true), resources are already set.
-    // Skip ensureUserResources to prevent double-initialization on app load.
-    if (isInitialized) {
-      console.log('[handleAuthStateChange] SIGNED_IN received but store already initialized — skipping ensureUserResources.');
+    // Check if the user is already set in store to prevent duplicate initialization on app load
+    if (currentUser?.id === user.id) {
+      console.log('[handleAuthStateChange] SIGNED_IN received for already active user — skipping resource initialization.');
+      setUser(user); // keep user token fresh
       return;
     }
 
-    console.log('[handleAuthStateChange] SIGNED_IN: store not yet initialized — running ensureUserResources.');
+    console.log('[handleAuthStateChange] SIGNED_IN received for new session — executing resource initialization.');
+    setUser(user);
+
     try {
       const { profile: profileData, workspace: workspaceData } = await ensureUserResources(user);
 
-      // Guard: if ensureUserResources returned early due to the lock (initialize() running
-      // concurrently), both values will be whatever was in state (possibly null). Only
-      // update state if we actually got real data back — do NOT clobber what initialize()
-      // is about to set.
+      // Insert login notification
+      supabase
+        .from('notifications')
+        .insert({
+          user_id: user.id,
+          workspace_id: workspaceData?.id || null,
+          type: 'verification',
+          title: 'New Sign In Detected',
+          message: `New sign in detected for account: ${user.email}`,
+          is_read: false
+        })
+        .then(({ error }) => {
+          if (error) console.error("Error creating login notification:", error);
+        });
+
       if (profileData) {
         const isVerified = !!user.email_confirmed_at;
         if (profileData.email_verified !== isVerified) {

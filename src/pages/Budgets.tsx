@@ -1,41 +1,62 @@
 import React from 'react';
 import { useAuthStore } from '@/stores/authStore';
-import { useBudgets, useCategories, useCreateBudget, useExpenses } from '@/hooks/useQueries';
+import { 
+  useBudgets, 
+  useCategories, 
+  useCreateBudget, 
+  useUpdateBudget,
+  useDeleteBudget,
+  useExpenses, 
+  useWorkspaceMembers 
+} from '@/hooks/useQueries';
 import { TextReveal } from '@/components/ui/cascade-text';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/Card';
-import { Button } from '@/components/Button';
-import { Input, Select } from '@/components/Input';
+import { Button, IconButton } from '@/components/Button';
+import { Input, Select, Textarea, Checkbox } from '@/components/Input';
 import { Modal } from '@/components/Modal';
 import { formatCurrency, getBudgetPercentage, getBudgetStatus } from '@/lib/utils';
 import { useUIStore } from '@/stores/uiStore';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { toast } from 'sonner';
 import { z } from 'zod';
 import { CategoryIcon } from './Categories';
-import { Plus, Target, TriangleAlert as AlertTriangle } from 'lucide-react';
+import { Plus, Target, TriangleAlert as AlertTriangle, Edit, Trash2, Lock, Users, User, Bell } from 'lucide-react';
+import type { Budget } from '@/types';
 
 const budgetSchema = z.object({
   amount: z.number().positive('Amount must be positive'),
   category_id: z.string().optional().nullable(),
   budget_type: z.enum(['monthly', 'yearly']),
+  name: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
+  alerts: z.boolean().default(true),
+  scope: z.enum(['personal', 'family']).default('personal'),
 });
 
 type BudgetFormData = z.infer<typeof budgetSchema>;
 
 export function BudgetsPage() {
-  const { workspace } = useAuthStore();
+  const { workspace, user } = useAuthStore();
   const workspaceId = workspace?.id;
   const addNotification = useUIStore((s) => s.addNotification);
 
   const [isModalOpen, setIsModalOpen] = React.useState(false);
+  const [editingBudget, setEditingBudget] = React.useState<Budget | null>(null);
 
   const { data: budgets, isLoading: budgetsLoading } = useBudgets(workspaceId);
   const { data: categories } = useCategories(workspaceId);
+  const { data: members } = useWorkspaceMembers(workspaceId);
   const { data: expenses } = useExpenses(workspaceId, {
     date_from: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
   }, 1, 1000);
 
+  const currentMember = members?.find((m) => m.profile_id === user?.id);
+  const isAdminOrOwner = workspace?.owner_id === user?.id || currentMember?.member_role === 'admin';
+
   const createBudget = useCreateBudget();
+  const updateBudget = useUpdateBudget();
+  const deleteBudget = useDeleteBudget();
 
   const {
     register,
@@ -47,24 +68,140 @@ export function BudgetsPage() {
     defaultValues: {
       amount: undefined,
       budget_type: 'monthly',
+      category_id: '',
+      name: '',
+      notes: '',
+      alerts: true,
+      scope: 'personal',
     },
   });
 
-  const onSubmit = async (data: BudgetFormData) => {
+  const handleOpenAddModal = () => {
+    setEditingBudget(null);
+    reset({
+      amount: undefined,
+      category_id: '',
+      budget_type: 'monthly',
+      name: '',
+      notes: '',
+      alerts: true,
+      scope: 'personal',
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEditModal = (budget: Budget) => {
+    setEditingBudget(budget);
+    reset({
+      amount: budget.amount,
+      category_id: budget.category_id || '',
+      budget_type: budget.budget_type,
+      name: budget.name || '',
+      notes: budget.notes || '',
+      alerts: budget.alerts !== false,
+      scope: budget.scope || 'personal',
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setEditingBudget(null);
+    reset();
+  };
+
+  const handleDeleteBudget = async (id: string, budgetName: string) => {
+    if (!window.confirm(`Are you sure you want to delete the budget "${budgetName}"?`)) return;
+    const toastId = toast.loading("Deleting budget...");
     try {
-      await createBudget.mutateAsync({
-        amount: data.amount,
-        category_id: data.category_id || null,
-        budget_type: data.budget_type,
-        workspace_id: workspaceId!,
-        currency_code: 'INR',
-        starts_on: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
+      await deleteBudget.mutateAsync({ id, workspaceId: workspaceId! });
+      toast.success("✅ Budget Deleted Successfully", {
+        id: toastId,
       });
-      addNotification({ type: 'success', title: 'Budget created', message: 'Your budget has been set up.' });
+      addNotification({ type: 'success', title: 'Budget deleted', message: `Budget for ${budgetName} has been deleted.` });
+    } catch (err: any) {
+      toast.error("❌ Failed to delete budget", {
+        id: toastId,
+        description: err?.message || 'Unknown error'
+      });
+    }
+  };
+
+  const onSubmit = async (data: BudgetFormData) => {
+    const toastId = toast.loading(editingBudget ? "Updating budget..." : "Creating budget...");
+    try {
+      if (editingBudget) {
+        await updateBudget.mutateAsync({
+          id: editingBudget.id,
+          updates: {
+            amount: data.amount,
+            category_id: data.category_id || null,
+            budget_type: data.budget_type,
+            name: data.name || null,
+            notes: data.notes || null,
+            alerts: data.alerts,
+            scope: data.scope,
+          },
+        });
+        toast.success("✅ Budget Updated Successfully", {
+          id: toastId,
+          description: "Your budget limit has been updated."
+        });
+        addNotification({ type: 'success', title: 'Budget updated', message: 'Your budget has been updated.' });
+      } else {
+        if (data.category_id === 'all_categories') {
+          if (categories && categories.length > 0) {
+            const promises = categories
+              .filter((c) => c.id)
+              .map((c) =>
+                createBudget.mutateAsync({
+                  amount: data.amount,
+                  category_id: c.id,
+                  budget_type: data.budget_type,
+                  workspace_id: workspaceId!,
+                  currency_code: 'INR',
+                  starts_on: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
+                  name: data.name || null,
+                  notes: data.notes || null,
+                  alerts: data.alerts,
+                  scope: data.scope,
+                })
+              );
+            await Promise.all(promises);
+          }
+          toast.success("✅ Budgets created for all categories!", {
+            id: toastId,
+            description: "All categories now have a budget set up."
+          });
+        } else {
+          await createBudget.mutateAsync({
+            amount: data.amount,
+            category_id: data.category_id || null,
+            budget_type: data.budget_type,
+            workspace_id: workspaceId!,
+            currency_code: 'INR',
+            starts_on: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
+            name: data.name || null,
+            notes: data.notes || null,
+            alerts: data.alerts,
+            scope: data.scope,
+          });
+          toast.success("✅ Budget Created Successfully", {
+            id: toastId,
+            description: "Your new budget limit has been set."
+          });
+        }
+        addNotification({ type: 'success', title: 'Budget created', message: 'Your budget has been set up.' });
+      }
       setIsModalOpen(false);
+      setEditingBudget(null);
       reset();
-    } catch {
-      addNotification({ type: 'error', title: 'Error', message: 'Failed to create budget' });
+    } catch (err: any) {
+      toast.error(editingBudget ? "❌ Failed to update budget" : "❌ Failed to create budget", {
+        id: toastId,
+        description: err?.message || 'Unknown error'
+      });
+      addNotification({ type: 'error', title: 'Error', message: editingBudget ? 'Failed to update budget' : 'Failed to create budget' });
     }
   };
 
@@ -83,6 +220,8 @@ export function BudgetsPage() {
   };
 
   const overallSpent = expenses?.data?.reduce((sum, e) => sum + e.amount, 0) || 0;
+  const overallBudget = budgets?.find((b) => !b.category_id);
+  const overallCanEdit = !overallBudget || overallBudget.scope !== 'family' || isAdminOrOwner;
 
   return (
     <div className="space-y-6">
@@ -94,18 +233,47 @@ export function BudgetsPage() {
             textSize="text-2xl"
           />
         </div>
-        <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setIsModalOpen(true)}>
+        <Button leftIcon={<Plus className="h-4 w-4" />} onClick={handleOpenAddModal}>
           Add Budget
         </Button>
       </div>
 
       {/* Overall Budget */}
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-base flex items-center gap-2">
             <Target className="h-5 w-5 text-primary-600" />
             Overall Monthly Spending
           </CardTitle>
+          {overallBudget && (
+            <div className="flex items-center gap-2">
+              {overallCanEdit ? (
+                <>
+                  <IconButton
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => handleOpenEditModal(overallBudget)}
+                    title="Edit Budget"
+                  >
+                    <Edit className="h-4 w-4" />
+                  </IconButton>
+                  <IconButton
+                    size="sm"
+                    variant="ghost"
+                    className="text-red-500 hover:bg-red-500/10"
+                    onClick={() => handleDeleteBudget(overallBudget.id, overallBudget.name || 'Overall Budget')}
+                    title="Delete Budget"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </IconButton>
+                </>
+              ) : (
+                <div className="p-1.5 rounded-lg bg-foreground/5 text-foreground/40" title="Locked Family Budget (View-only)">
+                  <Lock className="h-4 w-4" />
+                </div>
+              )}
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
@@ -116,34 +284,60 @@ export function BudgetsPage() {
               </div>
               <div className="text-right">
                 <p className="text-lg font-semibold text-foreground/80">
-                  {budgets?.find((b) => !b.category_id)?.amount
-                    ? formatCurrency(budgets.find((b) => !b.category_id)?.amount || 0)
+                  {overallBudget?.amount
+                    ? formatCurrency(overallBudget.amount)
                     : 'No budget set'}
                 </p>
                 <p className="text-sm text-foreground/60">monthly budget</p>
               </div>
             </div>
-            {budgets?.find((b) => !b.category_id) && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-foreground/60">Progress</span>
-                  <span className="font-medium">
-                    {getBudgetPercentage(overallSpent, budgets.find((b) => !b.category_id)?.amount || 1)}%
-                  </span>
+            
+            {overallBudget && (
+              <>
+                <div className="flex items-center gap-2 my-2">
+                  {overallBudget.scope === 'family' ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-[9px] font-bold text-purple-600 dark:text-purple-400">
+                      <Users className="h-3 w-3" /> Family Budget
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-500/10 border border-slate-500/20 text-[9px] font-bold text-slate-600 dark:text-slate-400">
+                      <User className="h-3 w-3" /> Personal
+                    </span>
+                  )}
+                  {overallBudget.alerts !== false && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-[9px] font-bold text-blue-600 dark:text-blue-400">
+                      <Bell className="h-3 w-3" /> Alerts On
+                    </span>
+                  )}
                 </div>
-                <div className="h-3 w-full bg-foreground/10 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full transition-all duration-500 rounded-full ${
-                      getBudgetStatus(getBudgetPercentage(overallSpent, budgets.find((b) => !b.category_id)?.amount || 1)) === 'danger'
-                        ? 'bg-red-500'
-                        : getBudgetStatus(getBudgetPercentage(overallSpent, budgets.find((b) => !b.category_id)?.amount || 1)) === 'warning'
-                        ? 'bg-amber-500'
-                        : 'bg-green-500'
-                    }`}
-                    style={{ width: `${Math.min(100, getBudgetPercentage(overallSpent, budgets.find((b) => !b.category_id)?.amount || 1))}%` }}
-                  />
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-foreground/60">Progress</span>
+                    <span className="font-medium">
+                      {getBudgetPercentage(overallSpent, overallBudget.amount || 1)}%
+                    </span>
+                  </div>
+                  <div className="h-3 w-full bg-foreground/10 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-500 rounded-full ${
+                        getBudgetStatus(getBudgetPercentage(overallSpent, overallBudget.amount || 1)) === 'danger'
+                          ? 'bg-red-500'
+                          : getBudgetStatus(getBudgetPercentage(overallSpent, overallBudget.amount || 1)) === 'warning'
+                          ? 'bg-amber-500'
+                          : 'bg-green-500'
+                      }`}
+                      style={{ width: `${Math.min(100, getBudgetPercentage(overallSpent, overallBudget.amount || 1))}%` }}
+                    />
+                  </div>
                 </div>
-              </div>
+
+                {overallBudget.notes && (
+                  <p className="text-xs text-foreground/50 border-t border-foreground/5 pt-3 mt-3 italic">
+                    "{overallBudget.notes}"
+                  </p>
+                )}
+              </>
             )}
           </div>
         </CardContent>
@@ -170,26 +364,85 @@ export function BudgetsPage() {
             .filter((b) => b.category_id)
             .map((budget) => {
               const progress = getBudgetProgress(budget);
+              const isLocked = budget.scope === 'family' && !isAdminOrOwner;
+              
               return (
                 <Card key={budget.id}>
                   <CardContent className="p-4">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div
-                        className="h-10 w-10 rounded-lg flex items-center justify-center text-white"
-                        style={{ backgroundColor: budget.category?.color || '#95A5A6' }}
-                      >
-                        <CategoryIcon iconName={budget.category?.icon || 'Circle'} className="h-5 w-5" />
+                    <div className="flex items-start justify-between gap-2 mb-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div
+                          className="h-10 w-10 rounded-lg flex items-center justify-center text-white shrink-0"
+                          style={{ backgroundColor: budget.category?.color || '#95A5A6' }}
+                        >
+                          <CategoryIcon iconName={budget.category?.icon || 'Circle'} className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0">
+                          <h3 className="font-semibold text-foreground truncate" title={budget.name || undefined}>
+                            {budget.name || (budget.category ? (
+                              budget.category.parent_id && categories
+                                ? `${categories.find((p) => p.id === budget.category!.parent_id)?.name || ''} › ${budget.category.name}`
+                                : budget.category.name
+                            ) : 'Category')}
+                          </h3>
+                          <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                            <span className="text-[10px] text-foreground/50 capitalize font-medium">{budget.budget_type}</span>
+                            {budget.name && budget.category && (
+                              <>
+                                <span className="w-1.5 h-1.5 rounded-full bg-foreground/25 inline-block" />
+                                <span className="text-[10px] text-foreground/50 truncate max-w-[100px]">{budget.category.name}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <h3 className="font-semibold text-foreground">
-                          {budget.category ? (
-                            budget.category.parent_id && categories
-                              ? `${categories.find((p) => p.id === budget.category!.parent_id)?.name || ''} › ${budget.category.name}`
-                              : budget.category.name
-                          ) : 'Category'}
-                        </h3>
-                        <p className="text-xs text-foreground/60 capitalize">{budget.budget_type} budget</p>
+
+                      {/* Action buttons */}
+                      <div className="flex items-center gap-0.5 shrink-0">
+                        {isLocked ? (
+                          <div className="p-1.5 rounded-lg bg-foreground/5 text-foreground/40" title="Locked Family Budget (View-only)">
+                            <Lock className="h-3.5 w-3.5" />
+                          </div>
+                        ) : (
+                          <>
+                            <IconButton
+                              size="sm"
+                              variant="ghost"
+                              className="text-foreground/50 hover:text-foreground"
+                              onClick={() => handleOpenEditModal(budget)}
+                              title="Edit Budget"
+                            >
+                              <Edit className="h-3.5 w-3.5" />
+                            </IconButton>
+                            <IconButton
+                              size="sm"
+                              variant="ghost"
+                              className="text-red-500 hover:bg-red-500/10"
+                              onClick={() => handleDeleteBudget(budget.id, budget.name || budget.category?.name || 'Category budget')}
+                              title="Delete Budget"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </IconButton>
+                          </>
+                        )}
                       </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 mb-4">
+                      {budget.scope === 'family' ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-[9px] font-bold text-purple-600 dark:text-purple-400">
+                          <Users className="h-3 w-3" /> Family Budget
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-500/10 border border-slate-500/20 text-[9px] font-bold text-slate-600 dark:text-slate-400">
+                          <User className="h-3 w-3" /> Personal
+                        </span>
+                      )}
+                      {budget.alerts !== false && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-[9px] font-bold text-blue-600 dark:text-blue-400">
+                          <Bell className="h-3 w-3" /> Alerts On
+                        </span>
+                      )}
                     </div>
 
                     <div className="space-y-4">
@@ -227,6 +480,12 @@ export function BudgetsPage() {
                           </span>
                         </div>
                       )}
+
+                      {budget.notes && (
+                        <p className="text-xs text-foreground/50 border-t border-foreground/5 pt-3 mt-3 italic line-clamp-2" title={budget.notes}>
+                          "{budget.notes}"
+                        </p>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -241,7 +500,7 @@ export function BudgetsPage() {
             <p className="text-sm text-foreground/50 mt-1">
               Set category-specific budgets to track spending more effectively
             </p>
-            <Button variant="ghost" className="mt-4" onClick={() => setIsModalOpen(true)}>
+            <Button variant="ghost" className="mt-4" onClick={handleOpenAddModal}>
               Add Budget
             </Button>
           </CardContent>
@@ -249,7 +508,12 @@ export function BudgetsPage() {
       )}
 
       {/* Budget Form Modal */}
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Add Budget" size="md">
+      <Modal 
+        isOpen={isModalOpen} 
+        onClose={handleCloseModal} 
+        title={editingBudget ? "Edit Budget" : "Add Budget"} 
+        size="md"
+      >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <Input
             label="Budget Amount *"
@@ -262,22 +526,74 @@ export function BudgetsPage() {
           />
 
           <Select
-            label="Category (leave empty for overall budget)"
-            options={categories?.filter((c) => c.id).map((c) => {
-              const parent = c.parent_id ? categories.find((p) => p.id === c.parent_id) : null;
-              const label = parent ? `${parent.name} › ${c.name}` : c.name;
-              return { value: c.id, label };
-            }) || []}
-            placeholder="All categories (overall budget)"
+            label="Category"
+            options={[
+              { value: '', label: 'All categories (overall budget)' },
+              ...(!editingBudget ? [{ value: 'all_categories', label: '★ All Categories (Individual budgets)' }] : []),
+              ...(categories?.filter((c) => c.id).map((c) => {
+                const parent = c.parent_id ? categories.find((p) => p.id === c.parent_id) : null;
+                const label = parent ? `${parent.name} › ${c.name}` : c.name;
+                return { value: c.id, label };
+              }) || [])
+            ]}
+            error={errors.category_id?.message}
             {...register('category_id')}
           />
 
-          <div className="flex items-center gap-3 pt-4">
-            <Button type="button" variant="secondary" onClick={() => setIsModalOpen(false)}>
+          <Select
+            label="Period *"
+            options={[
+              { value: 'monthly', label: 'Monthly' },
+              { value: 'yearly', label: 'Yearly' },
+            ]}
+            error={errors.budget_type?.message}
+            {...register('budget_type')}
+          />
+
+          <Input
+            label="Budget Name (Optional)"
+            placeholder="e.g., Summer Shopping, Family Grocery Plan"
+            error={errors.name?.message}
+            {...register('name')}
+          />
+
+          <Select
+            label="Scope"
+            disabled={!isAdminOrOwner}
+            options={[
+              { value: 'personal', label: 'Personal Budget' },
+              { value: 'family', label: 'Family Budget (Shared)' },
+            ]}
+            error={errors.scope?.message}
+            {...register('scope')}
+          />
+          {!isAdminOrOwner && (
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              Family budgets can only be managed by Family Head/Admin.
+            </p>
+          )}
+
+          <Textarea
+            label="Notes (Optional)"
+            placeholder="Add extra details, instructions, or notes..."
+            error={errors.notes?.message}
+            {...register('notes')}
+          />
+
+          <div className="pt-2">
+            <Checkbox
+              label="Enable automatic notifications & alerts (at 50%, 80%, and 100% threshold)"
+              error={errors.alerts?.message}
+              {...register('alerts')}
+            />
+          </div>
+
+          <div className="flex items-center gap-3 pt-4 justify-end">
+            <Button type="button" variant="secondary" onClick={handleCloseModal}>
               Cancel
             </Button>
             <Button type="submit" isLoading={isSubmitting}>
-              Create Budget
+              {editingBudget ? "Save Changes" : "Create Budget"}
             </Button>
           </div>
         </form>

@@ -140,20 +140,23 @@ export interface Budget {
   created_at: string;
   updated_at: string;
   category?: Category;
+  name?: string | null;
+  notes?: string | null;
+  alerts?: boolean;
+  scope?: 'personal' | 'family';
 }
 
 export interface Notification {
   id: string;
-  workspace_id: string;
+  workspace_id: string | null;
   user_id: string;
   type: 'budget' | 'anomaly' | 'summary' | 'reminder' | 'verification' | 'family_invite';
   title: string;
-  body: string;
+  message: string;
   entity_type: string | null;
   entity_id: string | null;
-  channel: 'in_app' | 'email' | 'push';
-  read_at: string | null;
-  sent_at: string | null;
+  family_id?: string | null;
+  is_read: boolean;
   created_at: string;
 }
 

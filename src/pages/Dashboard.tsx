@@ -1,12 +1,12 @@
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuthStore } from '@/stores/authStore';
-import { useMonthlySummary, useExpenses, useCategories } from '@/hooks/useQueries';
+import { useMonthlySummary, useExpenses, useCategories, useNotifications } from '@/hooks/useQueries';
 import { TextReveal } from '@/components/ui/cascade-text';
 import { Button } from '@/components/Button';
 import { StatCardSkeleton, ExpenseRowSkeleton } from '@/components/Skeleton';
-import { formatCurrency, formatDate } from '@/lib/utils';
-import { Plus, TrendingUp, TrendingDown, Wallet, Layers, ArrowRight, Sparkles, Activity, Target } from 'lucide-react';
+import { formatCurrency, formatDate, cn } from '@/lib/utils';
+import { Plus, TrendingUp, TrendingDown, Wallet, Layers, ArrowRight, Sparkles, Activity, Target, Bell, CircleAlert as AlertCircle } from 'lucide-react';
 import {
   Tooltip as RechartsTooltip,
   ResponsiveContainer,
@@ -83,7 +83,7 @@ function buildSparklineData(expenses: { expense_date: string; amount: number }[]
 }
 
 export function Dashboard() {
-  const { workspace, profile } = useAuthStore();
+  const { user, workspace, profile } = useAuthStore();
   const { darkMode } = useUIStore();
   const workspaceId = workspace?.id;
   const currentMonth = new Date().getMonth();
@@ -96,6 +96,9 @@ export function Dashboard() {
     date_from: `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`,
     date_to: `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${new Date(currentYear, currentMonth + 1, 0).getDate()}`,
   }, 1, 200);
+
+  const { data: notifications } = useNotifications(user?.id);
+  const unreadCount = notifications?.filter((n) => !n.is_read).length || 0;
 
   const tooltipStyle = {
     background: darkMode ? 'rgba(15,23,42,0.95)' : 'rgba(255,255,255,0.95)',
@@ -157,6 +160,30 @@ export function Dashboard() {
           </Button>
         </Link>
       </motion.div>
+
+      {/* Notifications Banner Alert */}
+      {unreadCount > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="relative overflow-hidden rounded-2xl border border-primary-500/30 bg-gradient-to-r from-primary-500/10 to-primary-600/5 backdrop-blur-xl p-4 flex items-center justify-between gap-4 group"
+        >
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-primary-500/20 flex items-center justify-center text-primary-600 dark:text-primary-400 shrink-0">
+              <Bell className="h-5 w-5 animate-pulse" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-foreground">You have new alerts</p>
+              <p className="text-xs text-foreground/60 mt-0.5">There are {unreadCount} unread system notifications requiring your attention.</p>
+            </div>
+          </div>
+          <Link to="/notifications">
+            <Button size="sm" variant="secondary" rightIcon={<ArrowRight className="h-4 w-4" />}>
+              View Center
+            </Button>
+          </Link>
+        </motion.div>
+      )}
 
       {/* ── Stat Cards ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
@@ -308,64 +335,137 @@ export function Dashboard() {
         </motion.div>
       </div>
 
-      {/* ── Recent Expenses ── */}
-      <motion.div custom={6} initial="hidden" animate="show" variants={fadeUp} className="glass-card overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-5 border-b border-foreground/5">
-          <div>
-            <h3 className="text-sm font-bold text-foreground">Recent Expenses</h3>
-            <p className="text-xs text-foreground/45 mt-0.5">Latest transactions</p>
-          </div>
-          <Link to="/expenses" className="flex items-center gap-1 text-xs font-bold text-primary-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors group">
-            View all <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
-          </Link>
-        </div>
-        {recentExpenses && recentExpenses.data.length > 0 ? (
-          <div className="divide-y divide-foreground/5">
-            {recentExpenses.data.slice(0, 5).map((expense, idx) => (
-              <motion.div
-                key={expense.id}
-                initial={{ opacity: 0, x: -12 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: idx * 0.06 + 0.3, duration: 0.4 }}
-                className="flex items-center gap-4 py-4 px-6 hover:bg-foreground/[0.02] transition-colors duration-200 group"
-              >
-                <div
-                  className="h-10 w-10 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
-                  style={{ backgroundColor: expense.category?.color || '#6366F1' }}
-                >
-                  <CategoryIcon iconName={expense.category?.icon || 'Circle'} className="h-5 w-5" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-foreground truncate">{expense.title}</p>
-                  <p className="text-xs text-foreground/50 mt-0.5 flex items-center gap-1.5">
-                    {formatDate(expense.expense_date)}
-                    {expense.category && (
-                      <>
-                        <span className="w-1 h-1 rounded-full bg-foreground/25 inline-block" />
-                        <span style={{ color: expense.category.color || undefined }}>{expense.category.name}</span>
-                      </>
-                    )}
-                  </p>
-                </div>
-                <span className="text-sm font-bold text-foreground tabular-nums">{formatCurrency(expense.amount)}</span>
-              </motion.div>
-            ))}
-          </div>
-        ) : (
-          <div className="py-16 text-center space-y-4">
-            <div className="h-14 w-14 rounded-2xl bg-foreground/5 flex items-center justify-center mx-auto">
-              <Wallet className="h-7 w-7 text-foreground/25" />
-            </div>
+      {/* ── Recent Actions & Alerts Grid ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Recent Expenses (col-span-2) */}
+        <motion.div
+          custom={6}
+          initial="hidden"
+          animate="show"
+          variants={fadeUp}
+          className="glass-card overflow-hidden lg:col-span-2 flex flex-col h-full"
+        >
+          <div className="flex items-center justify-between px-6 py-5 border-b border-foreground/5 shrink-0">
             <div>
-              <p className="text-sm font-medium text-foreground/60">No expenses yet</p>
-              <p className="text-xs text-foreground/40 mt-1">Start tracking to see your spending here</p>
+              <h3 className="text-sm font-bold text-foreground">Recent Expenses</h3>
+              <p className="text-xs text-foreground/45 mt-0.5">Latest transactions</p>
             </div>
-            <Link to="/expenses/new">
-              <Button variant="secondary" size="sm" leftIcon={<Plus className="h-4 w-4" />}>Add First Expense</Button>
+            <Link to="/expenses" className="flex items-center gap-1 text-xs font-bold text-primary-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors group">
+              View all <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
             </Link>
           </div>
-        )}
-      </motion.div>
+          <div className="flex-grow">
+            {recentExpenses && recentExpenses.data.length > 0 ? (
+              <div className="divide-y divide-foreground/5">
+                {recentExpenses.data.slice(0, 5).map((expense, idx) => (
+                  <motion.div
+                    key={expense.id}
+                    initial={{ opacity: 0, x: -12 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: idx * 0.06 + 0.3, duration: 0.4 }}
+                    className="flex items-center gap-4 py-4 px-6 hover:bg-foreground/[0.02] transition-colors duration-200 group"
+                  >
+                    <div
+                      className="h-10 w-10 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
+                      style={{ backgroundColor: expense.category?.color || '#6366F1' }}
+                    >
+                      <CategoryIcon iconName={expense.category?.icon || 'Circle'} className="h-5 w-5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-foreground truncate">{expense.title}</p>
+                      <p className="text-xs text-foreground/50 mt-0.5 flex items-center gap-1.5">
+                        {formatDate(expense.expense_date)}
+                        {expense.category && (
+                          <>
+                            <span className="w-1 h-1 rounded-full bg-foreground/25 inline-block" />
+                            <span style={{ color: expense.category.color || undefined }}>{expense.category.name}</span>
+                          </>
+                        )}
+                      </p>
+                    </div>
+                    <span className="text-sm font-bold text-foreground tabular-nums">{formatCurrency(expense.amount)}</span>
+                  </motion.div>
+                ))}
+              </div>
+            ) : (
+              <div className="py-16 text-center space-y-4">
+                <div className="h-14 w-14 rounded-2xl bg-foreground/5 flex items-center justify-center mx-auto">
+                  <Wallet className="h-7 w-7 text-foreground/25" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-foreground/60">No expenses yet</p>
+                  <p className="text-xs text-foreground/40 mt-1">Start tracking to see your spending here</p>
+                </div>
+                <Link to="/expenses/new">
+                  <Button variant="secondary" size="sm" leftIcon={<Plus className="h-4 w-4" />}>Add First Expense</Button>
+                </Link>
+              </div>
+            )}
+          </div>
+        </motion.div>
+
+        {/* Recent Notifications Widget (col-span-1) */}
+        <motion.div
+          custom={7}
+          initial="hidden"
+          animate="show"
+          variants={fadeUp}
+          className="glass-card overflow-hidden lg:col-span-1 flex flex-col h-full"
+        >
+          <div className="flex items-center justify-between px-6 py-5 border-b border-foreground/5 shrink-0">
+            <div>
+              <h3 className="text-sm font-bold text-foreground">Notifications</h3>
+              <p className="text-xs text-foreground/45 mt-0.5">Recent updates</p>
+            </div>
+            <Link to="/notifications" className="flex items-center gap-1 text-xs font-bold text-primary-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors group">
+              View all <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
+            </Link>
+          </div>
+          <div className="flex-grow overflow-y-auto max-h-[360px] scrollbar-thin divide-y divide-foreground/5">
+            {notifications && notifications.length > 0 ? (
+              notifications.slice(0, 4).map((notification) => {
+                let iconBg = 'bg-primary-500/10 text-primary-500';
+                let Icon = Bell;
+                if (notification.type === 'budget') {
+                  iconBg = 'bg-red-500/10 text-red-500';
+                  Icon = Target;
+                } else if (notification.type === 'anomaly') {
+                  iconBg = 'bg-rose-500/10 text-rose-500';
+                  Icon = AlertCircle;
+                } else if (notification.type === 'summary') {
+                  iconBg = 'bg-purple-500/10 text-purple-500';
+                  Icon = Activity;
+                }
+                return (
+                  <div key={notification.id} className="p-4 flex gap-3 hover:bg-foreground/[0.01] transition-colors duration-200">
+                    <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center shrink-0 shadow-sm", iconBg)}>
+                      <Icon className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className={cn("text-xs font-semibold truncate", !notification.is_read ? "text-foreground font-bold" : "text-foreground/70")}>
+                          {notification.title}
+                        </p>
+                        {!notification.is_read && (
+                          <span className="h-1.5 w-1.5 rounded-full bg-primary-500 shrink-0 shadow-[0_0_8px_rgba(99,102,241,0.5)] animate-pulse" />
+                        )}
+                      </div>
+                      <p className="text-[11px] text-foreground/50 line-clamp-2 mt-0.5">{notification.message}</p>
+                      <p className="text-[9px] text-foreground/40 mt-1">{new Date(notification.created_at).toLocaleDateString('en-IN', { dateStyle: 'short' })}</p>
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center text-foreground/40 p-6 text-center space-y-2 py-16">
+                <Bell className="h-8 w-8 text-foreground/25 mx-auto" />
+                <p className="text-xs font-semibold text-foreground/60">All caught up!</p>
+                <p className="text-[10px] text-foreground/40 font-normal">No recent notifications</p>
+              </div>
+            )}
+          </div>
+        </motion.div>
+      </div>
     </div>
   );
 }

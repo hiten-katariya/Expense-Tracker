@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import type { Expense, Category, Family, FamilyMember, Budget, Notification } from '@/types';
+import type { Expense, Category, Family, FamilyMember, Budget, Notification, WorkspaceMember } from '@/types';
 export function useCategories(workspaceId: string | undefined) {
   return useQuery({
     queryKey: ['categories', workspaceId],
@@ -53,6 +53,23 @@ export function useCreateCategory() {
         console.error("Hint:", error.hint);
         throw error;
       }
+
+      if (data && category.workspace_id) {
+        const { useAuthStore } = await import('@/stores/authStore');
+        const { user } = useAuthStore.getState();
+        if (user?.id) {
+          await createNotification({
+            workspaceId: category.workspace_id,
+            actorId: user.id,
+            type: 'summary',
+            title: 'Category Created',
+            message: 'New category added.',
+            entityType: 'category',
+            entityId: data.id,
+          });
+        }
+      }
+
       return data;
     },
     onSuccess: (_, variables) => {
@@ -79,10 +96,28 @@ export function useUpdateCategory() {
         console.error("Hint:", error.hint);
         throw error;
       }
+
+      if (data) {
+        const { useAuthStore } = await import('@/stores/authStore');
+        const { user } = useAuthStore.getState();
+        if (user?.id) {
+          await createNotification({
+            workspaceId: data.workspace_id,
+            actorId: user.id,
+            type: 'summary',
+            title: 'Category Updated',
+            message: 'Category modified successfully.',
+            entityType: 'category',
+            entityId: data.id,
+          });
+        }
+      }
+
       return data;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['categories', data.workspace_id] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
     },
   });
 }
@@ -90,7 +125,7 @@ export function useUpdateCategory() {
 export function useDeleteCategory() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id }: { id: string; workspaceId: string }) => {
+    mutationFn: async ({ id, workspaceId }: { id: string; workspaceId: string }) => {
       const { error } = await supabase
         .from('categories')
         .delete()
@@ -103,9 +138,24 @@ export function useDeleteCategory() {
         console.error("Hint:", error.hint);
         throw error;
       }
+
+      const { useAuthStore } = await import('@/stores/authStore');
+      const { user } = useAuthStore.getState();
+      if (user?.id) {
+        await createNotification({
+          workspaceId,
+          actorId: user.id,
+          type: 'summary',
+          title: 'Category Deleted',
+          message: 'Category removed.',
+          entityType: 'category',
+          entityId: id,
+        });
+      }
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['categories', variables.workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
     },
   });
 }
@@ -171,7 +221,59 @@ export function useExpenses(
       return { data: data as Expense[], count: count || 0 };
     },
     enabled: !!workspaceId,
+    staleTime: 0,
   });
+}
+
+async function createNotification({
+  workspaceId,
+  actorId,
+  type,
+  title,
+  message,
+  entityType = null,
+  entityId = null,
+}: {
+  workspaceId?: string | null;
+  actorId: string;
+  type: 'budget' | 'anomaly' | 'summary' | 'reminder' | 'verification' | 'family_invite';
+  title: string;
+  message: string;
+  entityType?: string | null;
+  entityId?: string | null;
+}) {
+  try {
+    let memberIds: string[] = [actorId];
+    if (workspaceId) {
+      const { data: members, error } = await supabase
+        .from('workspace_members')
+        .select('profile_id')
+        .eq('workspace_id', workspaceId);
+
+      if (!error && members && members.length > 0) {
+        memberIds = members.map((m) => m.profile_id);
+      }
+    }
+
+    const notificationsToInsert = memberIds.map((profileId) => ({
+      workspace_id: workspaceId || null,
+      user_id: profileId,
+      type,
+      title,
+      message,
+      entity_type: entityType,
+      entity_id: entityId,
+      is_read: false,
+    }));
+
+    const { error: insertError } = await supabase
+      .from('notifications')
+      .insert(notificationsToInsert);
+
+    if (insertError) throw insertError;
+  } catch (err) {
+    console.error("Failed to create notification:", err);
+  }
 }
 
 export function useCreateExpense() {
@@ -245,11 +347,26 @@ export function useCreateExpense() {
         console.error("useCreateExpense Error Hint:", error.hint);
         throw error;
       }
+
+      if (data) {
+        await createNotification({
+          workspaceId: payload.workspace_id,
+          actorId: user.id,
+          type: 'reminder',
+          title: 'Expense Added',
+          message: 'A new expense has been recorded.',
+          entityType: 'expense',
+          entityId: data.id,
+        });
+      }
+
       return data;
     },
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['expenses', variables.workspace_id] });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
       queryClient.invalidateQueries({ queryKey: ['monthly-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['budgets'] });
     },
   });
 }
@@ -326,11 +443,26 @@ export function useUpdateExpense() {
         console.error("useUpdateExpense Error Hint:", error.hint);
         throw error;
       }
+
+      if (data) {
+        await createNotification({
+          workspaceId: payload.workspace_id,
+          actorId: user.id,
+          type: 'reminder',
+          title: 'Expense Updated',
+          message: 'Expense details were modified.',
+          entityType: 'expense',
+          entityId: data.id,
+        });
+      }
+
       return data;
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['expenses', data.workspace_id] });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
       queryClient.invalidateQueries({ queryKey: ['monthly-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['budgets'] });
     },
   });
 }
@@ -338,17 +470,41 @@ export function useUpdateExpense() {
 export function useDeleteExpense() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id }: { id: string; workspaceId: string }) => {
+    mutationFn: async ({ id, workspaceId }: { id: string; workspaceId: string }) => {
+      const { useAuthStore } = await import('@/stores/authStore');
+      const { user } = useAuthStore.getState();
+      const actorId = user?.id || '';
+
+      const { data: expense } = await supabase
+        .from('expenses')
+        .select('title, amount')
+        .eq('id', id)
+        .maybeSingle();
+
       const { error } = await supabase
         .from('expenses')
         .update({ is_deleted: true, deleted_at: new Date().toISOString() })
         .eq('id', id);
       if (error) throw error;
+
+      if (expense && actorId) {
+        await createNotification({
+          workspaceId,
+          actorId,
+          type: 'anomaly',
+          title: 'Expense Deleted',
+          message: 'Expense moved to trash.',
+          entityType: 'expense',
+          entityId: id,
+        });
+      }
     },
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['expenses', variables.workspaceId] });
-      queryClient.invalidateQueries({ queryKey: ['trash', variables.workspaceId] });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['trash'] });
       queryClient.invalidateQueries({ queryKey: ['monthly-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['budgets'] });
     },
   });
 }
@@ -375,17 +531,42 @@ export function useRestoreExpense() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, workspaceId }: { id: string; workspaceId: string }) => {
+      const { useAuthStore } = await import('@/stores/authStore');
+      const { user } = useAuthStore.getState();
+      const actorId = user?.id || '';
+
+      const { data: expense } = await supabase
+        .from('expenses')
+        .select('title, amount')
+        .eq('id', id)
+        .maybeSingle();
+
       const { error } = await supabase
         .from('expenses')
         .update({ is_deleted: false, deleted_at: null })
         .eq('id', id);
       if (error) throw error;
+
+      if (expense && actorId) {
+        await createNotification({
+          workspaceId,
+          actorId,
+          type: 'verification',
+          title: 'Expense Restored',
+          message: 'Expense restored successfully.',
+          entityType: 'expense',
+          entityId: id,
+        });
+      }
+
       return { workspaceId };
     },
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['expenses', result.workspaceId] });
-      queryClient.invalidateQueries({ queryKey: ['trash', result.workspaceId] });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['trash'] });
       queryClient.invalidateQueries({ queryKey: ['monthly-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['budgets'] });
     },
   });
 }
@@ -394,15 +575,42 @@ export function usePermanentDeleteExpense() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, workspaceId }: { id: string; workspaceId: string }) => {
+      const { useAuthStore } = await import('@/stores/authStore');
+      const { user } = useAuthStore.getState();
+      const actorId = user?.id || '';
+
+      const { data: expense } = await supabase
+        .from('expenses')
+        .select('title, amount')
+        .eq('id', id)
+        .maybeSingle();
+
       const { error } = await supabase
         .from('expenses')
         .delete()
         .eq('id', id);
       if (error) throw error;
+
+      if (expense && actorId) {
+        await createNotification({
+          workspaceId,
+          actorId,
+          type: 'anomaly',
+          title: 'Expense Deleted',
+          message: 'Expense permanently deleted.',
+          entityType: 'expense',
+          entityId: id,
+        });
+      }
+
       return { workspaceId };
     },
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['trash', result.workspaceId] });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['trash'] });
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['monthly-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['budgets'] });
     },
   });
 }
@@ -411,17 +619,34 @@ export function useBulkRestore() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ ids, workspaceId }: { ids: string[]; workspaceId: string }) => {
+      const { useAuthStore } = await import('@/stores/authStore');
+      const { user } = useAuthStore.getState();
+      const actorId = user?.id || '';
+
       const { error } = await supabase
         .from('expenses')
         .update({ is_deleted: false, deleted_at: null })
         .in('id', ids);
       if (error) throw error;
+
+      if (actorId) {
+        await createNotification({
+          workspaceId,
+          actorId,
+          type: 'verification',
+          title: 'Expense Restored',
+          message: 'Expense restored successfully.',
+        });
+      }
+
       return { workspaceId };
     },
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['expenses', result.workspaceId] });
-      queryClient.invalidateQueries({ queryKey: ['trash', result.workspaceId] });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['trash'] });
       queryClient.invalidateQueries({ queryKey: ['monthly-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['budgets'] });
     },
   });
 }
@@ -430,15 +655,34 @@ export function useBulkPermanentDelete() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ ids, workspaceId }: { ids: string[]; workspaceId: string }) => {
+      const { useAuthStore } = await import('@/stores/authStore');
+      const { user } = useAuthStore.getState();
+      const actorId = user?.id || '';
+
       const { error } = await supabase
         .from('expenses')
         .delete()
         .in('id', ids);
       if (error) throw error;
+
+      if (actorId) {
+        await createNotification({
+          workspaceId,
+          actorId,
+          type: 'anomaly',
+          title: 'Expense Deleted',
+          message: 'Expense permanently deleted.',
+        });
+      }
+
       return { workspaceId };
     },
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['trash', result.workspaceId] });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['trash'] });
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['monthly-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['budgets'] });
     },
   });
 }
@@ -491,11 +735,24 @@ export function useImportExpenses() {
           results.imported += batch.length;
         }
       }
+
+      if (results.imported > 0) {
+        await createNotification({
+          workspaceId,
+          actorId: userId,
+          type: 'summary',
+          title: 'Expenses Imported',
+          message: `Successfully imported ${results.imported} expenses via CSV.`,
+        });
+      }
+
       return { ...results, batchId };
     },
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['expenses', variables.workspaceId] });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
       queryClient.invalidateQueries({ queryKey: ['monthly-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['budgets'] });
     },
   });
 }
@@ -505,26 +762,35 @@ export function useMonthlySummary(
   year: number = new Date().getFullYear(),
   month: number = new Date().getMonth()
 ) {
-  const { data: expenses } = useExpenses(workspaceId, {
-    date_from: `${year}-${String(month + 1).padStart(2, '0')}-01`,
-    date_to: `${year}-${String(month + 1).padStart(2, '0')}-${new Date(year, month + 1, 0).getDate()}`,
-  });
-
   return useQuery({
     queryKey: ['monthly-summary', workspaceId, year, month],
     queryFn: async () => {
+      if (!workspaceId) return null;
+
+      const dateFrom = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+      const dateTo = `${year}-${String(month + 1).padStart(2, '0')}-${new Date(year, month + 1, 0).getDate()}`;
+
+      const { data: expenses, error } = await supabase
+        .from('expenses')
+        .select('*, category:categories(*)')
+        .eq('workspace_id', workspaceId)
+        .eq('is_deleted', false)
+        .gte('expense_date', dateFrom)
+        .lte('expense_date', dateTo);
+
+      if (error) throw error;
       if (!expenses) return null;
 
-      const totalSpent = expenses.data.reduce((sum, e) => sum + e.amount, 0);
+      const totalSpent = expenses.reduce((sum, e) => sum + e.amount, 0);
       const daysInMonth = new Date(year, month + 1, 0).getDate();
-      const daysPassed = new Date().getMonth() === month
+      const daysPassed = new Date().getMonth() === month && new Date().getFullYear() === year
         ? new Date().getDate()
         : daysInMonth;
-      const dailyAverage = totalSpent / daysPassed;
+      const dailyAverage = totalSpent / (daysPassed || 1);
       const projectedTotal = dailyAverage * daysInMonth;
 
       const categoryMap = new Map<string, { total: number; count: number; category: Category | null }>();
-      expenses.data.forEach((expense) => {
+      expenses.forEach((expense) => {
         const catId = expense.category_id || 'other';
         const existing = categoryMap.get(catId) || { total: 0, count: 0, category: expense.category || null };
         categoryMap.set(catId, {
@@ -540,7 +806,7 @@ export function useMonthlySummary(
         category_icon: data.category?.icon,
         category_color: data.category?.color,
         total: data.total,
-        percentage: (data.total / totalSpent) * 100,
+        percentage: totalSpent > 0 ? (data.total / totalSpent) * 100 : 0,
         count: data.count,
       })).sort((a, b) => b.total - a.total);
 
@@ -552,8 +818,8 @@ export function useMonthlySummary(
         projected_total: projectedTotal,
       };
     },
-    enabled: !!expenses,
-    initialData: null,
+    enabled: !!workspaceId,
+    staleTime: 0,
   });
 }
 
@@ -583,6 +849,19 @@ export function useCreateFamily() {
         .select()
         .single();
       if (error) throw error;
+
+      if (data && family.owner_id) {
+        await createNotification({
+          workspaceId: null,
+          actorId: family.owner_id,
+          type: 'family_invite',
+          title: 'Family Created',
+          message: 'Family workspace created.',
+          entityType: 'family',
+          entityId: data.id,
+        });
+      }
+
       return data;
     },
     onSuccess: (_, variables) => {
@@ -607,6 +886,22 @@ export function useFamilyMembers(familyId: string | undefined) {
   });
 }
 
+export function useWorkspaceMembers(workspaceId: string | undefined) {
+  return useQuery({
+    queryKey: ['workspace-members', workspaceId],
+    queryFn: async () => {
+      if (!workspaceId) return [];
+      const { data, error } = await supabase
+        .from('workspace_members')
+        .select('*, profile:profiles(*)')
+        .eq('workspace_id', workspaceId);
+      if (error) throw error;
+      return data as WorkspaceMember[];
+    },
+    enabled: !!workspaceId,
+  });
+}
+
 export function useBudgets(workspaceId: string | undefined) {
   return useQuery({
     queryKey: ['budgets', workspaceId],
@@ -620,6 +915,7 @@ export function useBudgets(workspaceId: string | undefined) {
       return data as Budget[];
     },
     enabled: !!workspaceId,
+    staleTime: 0,
   });
 }
 
@@ -627,16 +923,115 @@ export function useCreateBudget() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (budget: Partial<Budget>) => {
+      const { useAuthStore } = await import('@/stores/authStore');
+      const { user } = useAuthStore.getState();
+      const userId = user?.id;
+
+      const payload = {
+        ...budget,
+        created_by: budget.created_by || userId || null,
+      };
+
       const { data, error } = await supabase
         .from('budgets')
-        .insert(budget)
+        .insert(payload)
         .select()
         .single();
       if (error) throw error;
+
+      if (data && userId) {
+        await createNotification({
+          workspaceId: data.workspace_id,
+          actorId: userId,
+          type: 'budget',
+          title: 'Budget Created',
+          message: 'New budget created successfully.',
+          entityType: 'budget',
+          entityId: data.id,
+        });
+      }
+
       return data;
     },
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['budgets', variables.workspace_id] });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['budgets'] });
+      queryClient.invalidateQueries({ queryKey: ['monthly-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+    },
+  });
+}
+
+export function useUpdateBudget() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, updates }: { id: string; updates: Partial<Budget> }) => {
+      const { useAuthStore } = await import('@/stores/authStore');
+      const { user } = useAuthStore.getState();
+      const userId = user?.id;
+
+      const { data, error } = await supabase
+        .from('budgets')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+
+      if (data && userId) {
+        await createNotification({
+          workspaceId: data.workspace_id,
+          actorId: userId,
+          type: 'budget',
+          title: 'Budget Updated',
+          message: 'Budget updated successfully.',
+          entityType: 'budget',
+          entityId: data.id,
+        });
+      }
+
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['budgets'] });
+      queryClient.invalidateQueries({ queryKey: ['monthly-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+    },
+  });
+}
+
+export function useDeleteBudget() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, workspaceId }: { id: string; workspaceId: string }) => {
+      const { useAuthStore } = await import('@/stores/authStore');
+      const { user } = useAuthStore.getState();
+      const userId = user?.id;
+
+      const { error } = await supabase
+        .from('budgets')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+
+      if (userId) {
+        await createNotification({
+          workspaceId,
+          actorId: userId,
+          type: 'budget',
+          title: 'Budget Deleted',
+          message: 'Budget removed successfully.',
+          entityType: 'budget',
+          entityId: id,
+        });
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['budgets'] });
+      queryClient.invalidateQueries({ queryKey: ['monthly-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
     },
   });
 }
@@ -665,8 +1060,57 @@ export function useMarkNotificationRead() {
     mutationFn: async ({ id }: { id: string; userId: string }) => {
       const { error } = await supabase
         .from('notifications')
-        .update({ read_at: new Date().toISOString() })
+        .update({ is_read: true })
         .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['notifications', variables.userId] });
+    },
+  });
+}
+
+export function useMarkAllNotificationsRead() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ userId }: { userId: string }) => {
+      const { error } = await supabase
+        .from('notifications')
+        .update({ is_read: true })
+        .eq('user_id', userId)
+        .eq('is_read', false);
+      if (error) throw error;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['notifications', variables.userId] });
+    },
+  });
+}
+
+export function useDeleteNotification() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id }: { id: string; userId: string }) => {
+      const { error } = await supabase
+        .from('notifications')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['notifications', variables.userId] });
+    },
+  });
+}
+
+export function useBulkDeleteNotifications() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ ids }: { ids: string[]; userId: string }) => {
+      const { error } = await supabase
+        .from('notifications')
+        .delete()
+        .in('id', ids);
       if (error) throw error;
     },
     onSuccess: (_, variables) => {

@@ -141,21 +141,30 @@ Textarea.displayName = 'Textarea';
 
 interface CheckboxProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'type'> {
   label: string;
+  error?: string;
 }
 
-export function Checkbox({ className, label, ...props }: CheckboxProps) {
-  return (
-    <label className="flex items-center gap-3 cursor-pointer group">
-      <input
-        type="checkbox"
-        className={cn(
-          'h-5 w-5 rounded border-slate-200 dark:border-white/10 bg-white dark:bg-bg-deep/40 text-primary-500 focus:ring-primary-500/20 focus:ring-offset-0 focus:ring-4',
-          'transition-all duration-300 cursor-pointer',
-          className
-        )}
-        {...props}
-      />
-      <span className="text-sm text-slate-600 dark:text-slate-300 group-hover:text-slate-800 dark:group-hover:text-white transition-colors duration-200">{label}</span>
-    </label>
-  );
-}
+export const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
+  ({ className, label, error, ...props }, ref) => {
+    return (
+      <div className="w-full">
+        <label className="flex items-center gap-3 cursor-pointer group">
+          <input
+            type="checkbox"
+            className={cn(
+              'h-5 w-5 rounded border-slate-200 dark:border-white/10 bg-white dark:bg-bg-deep/40 text-primary-500 focus:ring-primary-500/20 focus:ring-offset-0 focus:ring-4',
+              'transition-all duration-300 cursor-pointer',
+              className
+            )}
+            ref={ref}
+            {...props}
+          />
+          <span className="text-sm text-slate-600 dark:text-slate-300 group-hover:text-slate-800 dark:group-hover:text-white transition-colors duration-200">{label}</span>
+        </label>
+        {error && <p className="mt-2 text-xs font-medium text-red-400">{error}</p>}
+      </div>
+    );
+  }
+);
+
+Checkbox.displayName = 'Checkbox';

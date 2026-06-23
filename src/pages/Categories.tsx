@@ -10,6 +10,7 @@ import { CategoryCardSkeleton } from '@/components/Skeleton';
 import { formatCurrency } from '@/lib/utils';
 import { useUIStore } from '@/stores/uiStore';
 import { useForm } from 'react-hook-form';
+import { toast } from 'sonner';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import * as LucideIcons from 'lucide-react';
@@ -126,7 +127,11 @@ export function CategoriesPage() {
     setIsModalOpen(false);
     reset();
     setEditingCategory(null);
-  };  const onSubmit = async (data: CategoryFormData) => {
+  };
+  
+  const onSubmit = async (data: CategoryFormData) => {
+    const actionLabel = editingCategory ? "Updating category..." : "Creating category...";
+    const toastId = toast.loading(actionLabel);
     try {
       const payload = {
         name: data.name,
@@ -141,13 +146,25 @@ export function CategoriesPage() {
 
       if (editingCategory) {
         await updateCategory.mutateAsync({ id: editingCategory, updates: payload });
+        toast.success("✅ Category Updated Successfully", {
+          id: toastId,
+          description: "Changes saved successfully."
+        });
         addNotification({ type: 'success', title: 'Category updated', message: 'Changes saved successfully.' });
       } else {
         await createCategory.mutateAsync(payload);
+        toast.success("✅ Category Created Successfully", {
+          id: toastId,
+          description: "New category has been added."
+        });
         addNotification({ type: 'success', title: 'Category created', message: 'New category has been added.' });
       }
       closeModal();
     } catch (err: any) {
+      toast.error("❌ Failed to save category", {
+        id: toastId,
+        description: err?.message || 'Unknown error'
+      });
       console.error("Failed to save category:", err);
       if (err) {
         console.error("Supabase Error Code:", err.code);

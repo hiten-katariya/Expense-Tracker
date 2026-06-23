@@ -4,14 +4,16 @@ import { TextReveal } from '@/components/ui/cascade-text';
 import { useAuthStore } from '@/stores/authStore';
 import {
   useExpenses, useCategories, useCreateExpense, useUpdateExpense,
-  useDeleteExpense, useCheckDuplicateExpense,
+  useDeleteExpense, useCheckDuplicateExpense, useRestoreExpense,
 } from '@/hooks/useQueries';
+import { toast } from 'sonner';
 import { Card, CardContent } from '@/components/Card';
 import { Button, IconButton } from '@/components/Button';
 import { Input, Select } from '@/components/Input';
 import { ExpenseRowSkeleton } from '@/components/Skeleton';
 import { AdvancedExpenseFilters } from '@/components/ExpenseFilters';
 import { DuplicateWarningModal } from '@/components/DuplicateWarningModal';
+import { Modal } from '@/components/Modal';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { useUIStore } from '@/stores/uiStore';
 import type { Expense, ExpenseFilters } from '@/types';
@@ -62,13 +64,36 @@ export function ExpensesPage() {
   const { data: expenseData, isLoading } = useExpenses(workspaceId, allFilters, page, ITEMS_PER_PAGE);
   const { data: categories } = useCategories(workspaceId);
   const deleteExpense = useDeleteExpense();
+  const restoreExpense = useRestoreExpense();
 
-  const handleDelete = async (expense: Expense) => {
-    if (!window.confirm('Move this expense to trash?')) return;
+  const [expenseToDelete, setExpenseToDelete] = useState<Expense | null>(null);
+
+  const confirmDelete = async () => {
+    if (!expenseToDelete) return;
+    const expense = expenseToDelete;
+    setExpenseToDelete(null);
+    const toastId = toast.loading("Moving expense to trash...");
     try {
       await deleteExpense.mutateAsync({ id: expense.id, workspaceId: expense.workspace_id });
-      addNotification({ type: 'success', title: 'Moved to trash', message: `"${expense.title}" sent to trash.` });
+      toast.success("Expense Deleted", {
+        id: toastId,
+        description: "Expense moved to trash.",
+        action: {
+          label: "Undo",
+          onClick: async () => {
+            const undoToastId = toast.loading("Restoring expense...");
+            try {
+              await restoreExpense.mutateAsync({ id: expense.id, workspaceId: expense.workspace_id });
+              toast.success("Expense Restored", { id: undoToastId, description: "Expense has been restored successfully." });
+            } catch {
+              toast.error("❌ Failed to restore expense", { id: undoToastId });
+            }
+          }
+        }
+      });
+      addNotification({ type: 'success', title: 'Expense Deleted', message: `Expense moved to trash.` });
     } catch {
+      toast.error("Error", { id: toastId, description: "Failed to delete expense" });
       addNotification({ type: 'error', title: 'Error', message: 'Failed to delete expense' });
     }
   };
@@ -207,7 +232,7 @@ export function ExpensesPage() {
                     <IconButton size="sm" onClick={() => navigate(`/expenses/edit/${expense.id}`)}>
                       <Edit2 className="h-4 w-4" />
                     </IconButton>
-                    <IconButton size="sm" variant="danger" onClick={() => handleDelete(expense)}>
+                    <IconButton size="sm" variant="danger" onClick={() => setExpenseToDelete(expense)}>
                       <Trash2 className="h-4 w-4" />
                     </IconButton>
                   </div>
@@ -256,6 +281,16 @@ export function ExpensesPage() {
           </div>
         )}
       </Card>
+
+      <Modal isOpen={!!expenseToDelete} onClose={() => setExpenseToDelete(null)} title="Move Expense to Trash?">
+        <p className="text-foreground/70 mb-6">
+          Are you sure you want to move this expense to trash? You can restore it later.
+        </p>
+        <div className="flex justify-end gap-3">
+          <Button variant="secondary" onClick={() => setExpenseToDelete(null)}>Cancel</Button>
+          <Button variant="danger" onClick={confirmDelete} isLoading={deleteExpense.isPending}>Move to Trash</Button>
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -300,6 +335,8 @@ export function ExpenseFormPage() {
   });
 
   const doSave = async (data: ExpenseFormData) => {
+    const actionLabel = isEdit ? "Updating expense..." : "Adding expense...";
+    const toastId = toast.loading(actionLabel);
     try {
       const payload = {
         title: data.title,
@@ -313,15 +350,24 @@ export function ExpenseFormPage() {
       };
       if (isEdit && expenseId) {
         await updateExpense.mutateAsync({ id: expenseId, updates: payload });
-        addNotification({ type: 'success', title: 'Expense updated', message: 'Changes saved successfully.' });
+        toast.success("Expense Updated", {
+          id: toastId,
+          description: "Expense details have been updated."
+        });
+        addNotification({ type: 'success', title: 'Expense Updated', message: 'Expense details have been updated.' });
       } else {
         await createExpense.mutateAsync(payload);
-        addNotification({ type: 'success', title: 'Expense added', message: 'Your expense has been recorded.' });
+        toast.success("Expense Added", {
+          id: toastId,
+          description: "Your expense has been added successfully."
+        });
+        addNotification({ type: 'success', title: 'Expense Added', message: 'Your expense has been added successfully.' });
       }
       navigate('/expenses');
     } catch (err: unknown) {
       const e = err as { code?: string; message?: string; details?: string; hint?: string };
       console.error('Error saving expense:', e);
+      toast.error("❌ Failed to save expense", { id: toastId, description: e?.message || 'Unknown error' });
       addNotification({ type: 'error', title: 'Error', message: e?.message || 'Failed to save expense' });
     }
   };

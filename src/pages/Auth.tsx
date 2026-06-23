@@ -9,7 +9,7 @@ import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/Card';
 import { useUIStore } from '@/stores/uiStore';
-import { Loader as Loader2, Mail, Lock, User, ArrowLeft, Github, Eye, EyeOff, Phone, MapPin, Globe } from 'lucide-react';
+import { Loader as Loader2, Mail, Lock, User, ArrowLeft, Github, Eye, EyeOff, Phone } from 'lucide-react';
 
 const authSchema = z.object({
   email: z.string().email('Please enter a valid email address'),

@@ -11,6 +11,7 @@ import {
   useBulkPermanentDelete,
 } from '@/hooks/useQueries';
 import { useUIStore } from '@/stores/uiStore';
+import { toast } from 'sonner';
 import { Card, CardContent } from '@/components/Card';
 import { Button, IconButton } from '@/components/Button';
 import { ExpenseRowSkeleton } from '@/components/Skeleton';
@@ -110,10 +111,16 @@ export function TrashPage() {
   };
 
   const handleRestore = async (expense: Expense) => {
+    const toastId = toast.loading("Restoring expense...");
     try {
       await restoreExpense.mutateAsync({ id: expense.id, workspaceId: expense.workspace_id });
+      toast.success("♻️ Expense Restored", {
+        id: toastId,
+        description: "Expense restored successfully."
+      });
       addNotification({ type: 'success', title: 'Restored', message: `"${expense.title}" moved back to Expenses.` });
     } catch {
+      toast.error("❌ Failed to restore expense", { id: toastId });
       addNotification({ type: 'error', title: 'Error', message: 'Failed to restore expense.' });
     }
   };

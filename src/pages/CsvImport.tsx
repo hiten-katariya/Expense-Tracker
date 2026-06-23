@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { useCategories, useImportExpenses, useExpenses } from '@/hooks/useQueries';
 import { useUIStore } from '@/stores/uiStore';
+import { toast } from 'sonner';
 import { Card, CardContent } from '@/components/Card';
 import { Button, IconButton } from '@/components/Button';
 import { parseCSV, mapRow, computeDuplicateScore, downloadCSV, type ColumnMapping } from '@/lib/csvParser';
@@ -131,11 +132,20 @@ export function CsvImportPage() {
         is_deleted: false,
       }));
 
+    const toastId = toast.loading("Importing expenses...");
     try {
       const result = await importExpenses.mutateAsync({ rows: toImport, workspaceId, userId: profile.id });
       setImportResult(result);
+      toast.success("✅ Import Complete", {
+        id: toastId,
+        description: `Expenses imported successfully. ${result.imported} imported, ${result.failed} failed.`
+      });
     } catch (err: unknown) {
       const e = err as Error;
+      toast.error("❌ Import Failed", {
+        id: toastId,
+        description: e.message || 'Unknown error'
+      });
       addNotification({ type: 'error', title: 'Import failed', message: e.message || 'Unknown error' });
       setStep(2);
     }

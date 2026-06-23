@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { Layout } from '@/components/Layout';
 import { Toast } from '@/components/Modal';
 import { useUIStore } from '@/stores/uiStore';
+import { Toaster } from 'sonner';
 
 // Pages
 import { HomePage } from '@/pages/Home';
@@ -22,6 +23,7 @@ import { TrashPage } from '@/pages/Trash';
 import { CsvImportPage } from '@/pages/CsvImport';
 import OnboardingPage from '@/pages/Onboarding';
 import VerifyEmailPage from '@/pages/VerifyEmail';
+import { NotificationsPage } from '@/pages/Notifications';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -234,6 +236,16 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/notifications"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <NotificationsPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
 
       <Route
         path="/trash"
@@ -315,6 +327,7 @@ export default function App() {
       <BrowserRouter>
         <AppRoutes />
         <ToastContainer />
+        <Toaster position="top-right" richColors closeButton />
       </BrowserRouter>
     </QueryClientProvider>
   );
