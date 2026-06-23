@@ -1,0 +1,37 @@
+{
+  "id": "exp-env-123",
+  "name": "Expense Tracker API Environment",
+  "values": [
+    {
+      "key": "BASE_URL",
+      "value": "http://localhost:3001/api",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "JWT_TOKEN",
+      "value": "",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "EXPENSE_ID",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "CATEGORY_ID",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "BUDGET_ID",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    }
+  ],
+  "_postman_variable_scope": "environment"
+}
