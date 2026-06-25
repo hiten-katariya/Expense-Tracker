@@ -178,6 +178,7 @@ export function useExpenses(
     has_ai_categorized?: boolean;
     sort_field?: string;
     sort_dir?: 'asc' | 'desc';
+    expense_ids?: string[];
   },
   page: number = 1,
   pageSize: number = 20
@@ -194,18 +195,19 @@ export function useExpenses(
         .eq('expense_scope', filters?.expense_scope || 'personal')
         .eq('is_deleted', false);
 
-      if (filters?.category_id) query = query.eq('category_id', filters.category_id);
-      if (filters?.date_from)   query = query.gte('expense_date', filters.date_from);
-      if (filters?.date_to)     query = query.lte('expense_date', filters.date_to);
-      if (filters?.payment_method) query = query.eq('payment_method', filters.payment_method);
-      if (filters?.amount_min != null) query = query.gte('amount', filters.amount_min);
-      if (filters?.amount_max != null) query = query.lte('amount', filters.amount_max);
-      if (filters?.expense_scope) query = query.eq('expense_scope', filters.expense_scope);
-      if (filters?.family_id)   query = query.eq('family_id', filters.family_id);
+      if (filters?.expense_ids)         query = query.in('id', filters.expense_ids);
+      if (filters?.category_id)         query = query.eq('category_id', filters.category_id);
+      if (filters?.date_from)           query = query.gte('expense_date', filters.date_from);
+      if (filters?.date_to)             query = query.lte('expense_date', filters.date_to);
+      if (filters?.payment_method)      query = query.eq('payment_method', filters.payment_method);
+      if (filters?.amount_min != null)  query = query.gte('amount', filters.amount_min);
+      if (filters?.amount_max != null)  query = query.lte('amount', filters.amount_max);
+      if (filters?.expense_scope)       query = query.eq('expense_scope', filters.expense_scope);
+      if (filters?.family_id)           query = query.eq('family_id', filters.family_id);
       if (filters?.is_recurring != null) query = query.eq('is_recurring', filters.is_recurring);
-      if (filters?.import_source) query = query.eq('import_source', filters.import_source);
-      if (filters?.has_notes)   query = query.not('notes', 'is', null);
-      if (filters?.has_ai_categorized) query = query.not('ai_category_suggestion', 'is', null);
+      if (filters?.import_source)       query = query.eq('import_source', filters.import_source);
+      if (filters?.has_notes)           query = query.not('notes', 'is', null);
+      if (filters?.has_ai_categorized)  query = query.not('ai_category_suggestion', 'is', null);
       if (filters?.search) {
         query = query.or(`title.ilike.%${filters.search}%,notes.ilike.%${filters.search}%`);
       }

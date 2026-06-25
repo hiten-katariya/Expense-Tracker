@@ -20,9 +20,11 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 import { z } from 'zod';
+import { useBudgetRecommendations } from '@/hooks/useBudgetRecommendations';
+import { BudgetRecommendationCard } from '@/components/ai/BudgetRecommendationCard';
 import { CategoryIcon } from './Categories';
-import { Plus, Target, TriangleAlert as AlertTriangle, Edit, Trash2, Lock, Users, User, Bell } from 'lucide-react';
-import type { Budget } from '@/types';
+import { Plus, Target, TriangleAlert as AlertTriangle, Edit, Trash2, Lock, Users, User, Bell, Sparkles } from 'lucide-react';
+import type { Budget, BudgetRecommendation } from '@/types';
 
 const budgetSchema = z.object({
   amount: z.number().positive('Amount must be positive'),
@@ -58,6 +60,59 @@ export function BudgetsPage() {
   const createBudget = useCreateBudget();
   const updateBudget = useUpdateBudget();
   const deleteBudget = useDeleteBudget();
+
+  const { recommendations, refetch: refetchRecommendations } = useBudgetRecommendations(
+    user?.id,
+    workspaceId
+  );
+
+  const handleApplyRecommendation = async (rec: BudgetRecommendation) => {
+    const toastId = toast.loading(`Applying budget recommendation for ${rec.categoryName}...`);
+    try {
+      const existing = budgets?.find((b) => b.category_id === rec.categoryId);
+
+      if (existing) {
+        await updateBudget.mutateAsync({
+          id: existing.id,
+          updates: {
+            amount: rec.recommendedLimit,
+            category_id: existing.category_id,
+            budget_type: existing.budget_type,
+            name: existing.name,
+            notes: existing.notes,
+            alerts: existing.alerts,
+            scope: existing.scope,
+          },
+        });
+      } else {
+        await createBudget.mutateAsync({
+          amount: rec.recommendedLimit,
+          category_id: rec.categoryId,
+          budget_type: 'monthly',
+          workspace_id: workspaceId!,
+          currency_code: 'INR',
+          starts_on: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
+          name: `${rec.categoryName} Budget`,
+          notes: rec.reason,
+          alerts: true,
+          scope: 'personal',
+        });
+      }
+
+      toast.success(`✅ Budget set to ₹${rec.recommendedLimit}!`, { id: toastId });
+      addNotification({
+        type: 'success',
+        title: 'Budget Optimized',
+        message: `Set budget for ${rec.categoryName} to ₹${rec.recommendedLimit} based on AI suggestions.`,
+      });
+      refetchRecommendations();
+    } catch (err: any) {
+      toast.error(`❌ Failed to apply recommendation`, {
+        id: toastId,
+        description: err?.message || 'Unknown error',
+      });
+    }
+  };
 
   const {
     register,
@@ -343,6 +398,25 @@ export function BudgetsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* AI Budget Recommendations */}
+      {recommendations && recommendations.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-purple-500 animate-pulse" />
+            <h2 className="text-lg font-bold text-foreground">AI Budget Optimization Suggestions</h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {recommendations.map((rec, index) => (
+              <BudgetRecommendationCard
+                key={rec.categoryId || index}
+                recommendation={rec}
+                onApply={handleApplyRecommendation}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Category Budgets */}
       {budgetsLoading ? (

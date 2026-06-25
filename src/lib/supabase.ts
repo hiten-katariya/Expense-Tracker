@@ -102,3 +102,38 @@ export async function updateProfile(userId: string, updates: Partial<Profile>) {
   }
   return data;
 }
+
+if (typeof window !== 'undefined') {
+  const originalFetch = window.fetch;
+  window.fetch = async (input, init) => {
+    const url = typeof input === 'string' ? input : (input instanceof URL ? input.toString() : '');
+    if (url && (url.startsWith('/api/') || url.includes('/api/'))) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          init = init || {};
+          if (init.headers instanceof Headers) {
+            if (!init.headers.has('Authorization')) {
+              init.headers.set('Authorization', `Bearer ${session.access_token}`);
+            }
+          } else if (Array.isArray(init.headers)) {
+            const hasAuth = init.headers.some(([k]) => k.toLowerCase() === 'authorization');
+            if (!hasAuth) {
+              init.headers.push(['Authorization', `Bearer ${session.access_token}`]);
+            }
+          } else {
+            const headers = (init.headers || {}) as Record<string, string>;
+            if (!headers['Authorization'] && !headers['authorization']) {
+              headers['Authorization'] = `Bearer ${session.access_token}`;
+            }
+            init.headers = headers;
+          }
+        }
+      } catch (e) {
+        console.error('Error injecting auth token:', e);
+      }
+    }
+    return originalFetch(input, init);
+  };
+}
+

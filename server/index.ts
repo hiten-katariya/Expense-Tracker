@@ -12,6 +12,15 @@ import {
   sendFamilyInviteEmail,
   sendFamilyMonthlyReportEmail,
 } from './services/emailService.js';
+import { predictExpenseCategory } from './services/categorization.service.js';
+import { processAndCacheReceipt } from './services/receipt.service.js';
+import { getAIChatResponse } from './services/chat.service.js';
+import { normalizeMerchantName } from './services/merchant.service.js';
+import { generateMonthlyInsights } from './services/insights.service.js';
+import { detectExpenseAnomaly } from './services/anomaly.service.js';
+import { getBudgetRecommendations } from './services/budget.service.js';
+import { semanticSearchExpenses, updateExpenseEmbedding } from './services/embedding.service.js';
+import { runGeminiPrompt } from './services/gemini.service.js';
 
 // Load environment variables from the root .env.local file
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
@@ -20,7 +29,8 @@ const app = express();
 const port = process.env.PORT || 3001;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
@@ -829,6 +839,381 @@ app.post('/api/families/:id/monthly-summary/send', authenticateUser, async (req,
   }
 });
 
+// --- AI ENDPOINTS ---
+
+// 1. AI Categorization
+app.post('/api/ai/categorize', authenticateUser, async (req, res) => {
+  const { workspaceId, familyId, expenseId, merchant, title, notes, amount, categories } = req.body;
+  const user = (req as any).user;
+  const userId = user.id;
+
+  if (!amount || !categories) {
+    return res.status(400).json({ error: 'Missing required categorization parameters.' });
+  }
+
+  const userSupabase = getUserSupabase(req);
+
+  try {
+    const result = await predictExpenseCategory(merchant, title, notes, amount, categories);
+    
+    // Save categorization result to DB
+    const { data: catData, error: dbError } = await userSupabase
+      .from('ai_categorizations')
+      .insert({
+        user_id: userId,
+        workspace_id: workspaceId || null,
+        family_id: familyId || null,
+        expense_id: expenseId || null,
+        suggested_category: categories.find((c: any) => c.id === result.predicted_category_id)?.name || 'Other',
+        confidence: result.confidence,
+        reasoning: result.reasoning,
+        status: 'pending'
+      })
+      .select()
+      .maybeSingle();
+
+    if (dbError) {
+      console.error('Failed to save AI categorization details:', dbError);
+    }
+
+    // Auto-apply logic: if confidence >= 0.9, write category directly to the expense
+    let autoApplied = false;
+    if (result.confidence >= 0.9 && result.predicted_category_id && expenseId) {
+      const { error: updateError } = await userSupabase
+        .from('expenses')
+        .update({
+          category_id: result.predicted_category_id,
+          ai_category: categories.find((c: any) => c.id === result.predicted_category_id)?.name || 'Other',
+          ai_confidence: result.confidence,
+          ai_reasoning: result.reasoning,
+          ai_reviewed: true,
+          ai_processed: true
+        })
+        .eq('id', expenseId);
+
+      if (!updateError) {
+        autoApplied = true;
+        // Mark the categorization row as accepted
+        if (catData?.id) {
+          await userSupabase
+            .from('ai_categorizations')
+            .update({ status: 'accepted' })
+            .eq('id', catData.id);
+        }
+      } else {
+        console.error('Failed to auto-apply AI category suggestion:', updateError);
+      }
+    }
+
+    return res.status(200).json({
+      ...result,
+      categorizationId: catData?.id || null,
+      autoApplied
+    });
+  } catch (error) {
+    console.error('Error in /api/ai/categorize route:', error);
+    return res.status(500).json({ error: 'Internal AI categorization error' });
+  }
+});
+
+// 2. Receipt Scan / OCR
+app.post('/api/ai/scan-receipt', authenticateUser, async (req, res) => {
+  const { image, categories } = req.body;
+  const user = (req as any).user;
+  const userId = user.id;
+
+  if (!image || !categories) {
+    return res.status(400).json({ error: 'Missing image string or categories list.' });
+  }
+
+  const userSupabase = getUserSupabase(req);
+
+  try {
+    const imageBuffer = Buffer.from(image, 'base64');
+    const result = await processAndCacheReceipt(userSupabase, userId, imageBuffer, categories);
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error('Error in /api/ai/scan-receipt route:', error);
+    return res.status(500).json({ error: 'Internal AI OCR processing error' });
+  }
+});
+
+// 3. AI Chat Agent
+app.post('/api/ai/chat', authenticateUser, async (req, res) => {
+  const { message, history } = req.body;
+  const user = (req as any).user;
+  const userId = user.id;
+
+  if (!message) {
+    return res.status(400).json({ error: 'Missing message string.' });
+  }
+
+  const userSupabase = getUserSupabase(req);
+
+  try {
+    const aiResponse = await getAIChatResponse(userSupabase, userId, message, history || []);
+    return res.status(200).json({ response: aiResponse });
+  } catch (error) {
+    console.error('Error in /api/ai/chat route:', error);
+    return res.status(500).json({ error: 'Internal AI chat error' });
+  }
+});
+
+// 4. Smart Merchant Alias Normalization
+app.post('/api/ai/merchant', authenticateUser, async (req, res) => {
+  const { rawName } = req.body;
+  const user = (req as any).user;
+  const userId = user.id;
+
+  if (!rawName) {
+    return res.status(400).json({ error: 'Missing rawName merchant string.' });
+  }
+
+  const userSupabase = getUserSupabase(req);
+
+  try {
+    const canonicalName = await normalizeMerchantName(userSupabase, userId, rawName);
+    return res.status(200).json({ canonicalName });
+  } catch (error) {
+    console.error('Error in /api/ai/merchant route:', error);
+    return res.status(500).json({ error: 'Internal merchant alias normalization error' });
+  }
+});
+
+// 5. Accept Categorization Suggestion
+app.post('/api/ai/accept-suggestion', authenticateUser, async (req, res) => {
+  const { categorizationId, expenseId, categoryId, categoryName } = req.body;
+  if (!expenseId || !categoryId) {
+    return res.status(400).json({ error: 'Missing expenseId or categoryId.' });
+  }
+
+  const userSupabase = getUserSupabase(req);
+
+  try {
+    // 1. Update expense
+    const { error: updateError } = await userSupabase
+      .from('expenses')
+      .update({
+        category_id: categoryId,
+        ai_reviewed: true,
+        ai_category: categoryName || null
+      })
+      .eq('id', expenseId);
+
+    if (updateError) throw updateError;
+
+    // 2. Update categorization log
+    if (categorizationId) {
+      await userSupabase
+        .from('ai_categorizations')
+        .update({ status: 'accepted' })
+        .eq('id', categorizationId);
+    }
+
+    return res.status(200).json({ success: true, message: 'AI category suggestion accepted.' });
+  } catch (error) {
+    console.error('Error in /api/ai/accept-suggestion route:', error);
+    return res.status(500).json({ error: 'Failed to accept AI suggestion' });
+  }
+});
+
+// 6. Reject Categorization Suggestion
+app.post('/api/ai/reject-suggestion', authenticateUser, async (req, res) => {
+  const { categorizationId, expenseId } = req.body;
+
+  const userSupabase = getUserSupabase(req);
+
+  try {
+    // 1. Mark expense as reviewed (keeping the original category)
+    if (expenseId) {
+      await userSupabase
+        .from('expenses')
+        .update({ ai_reviewed: true })
+        .eq('id', expenseId);
+    }
+
+    // 2. Mark log as rejected
+    if (categorizationId) {
+      await userSupabase
+        .from('ai_categorizations')
+        .update({ status: 'rejected' })
+        .eq('id', categorizationId);
+    }
+
+    return res.status(200).json({ success: true, message: 'AI category suggestion rejected.' });
+  } catch (error) {
+    console.error('Error in /api/ai/reject-suggestion route:', error);
+    return res.status(500).json({ error: 'Failed to reject AI suggestion' });
+  }
+});
+
+// 7. Generate / Retrieve Monthly AI Insights
+app.post('/api/ai/monthly-insights', authenticateUser, async (req, res) => {
+  const { month, year, workspaceId, familyId } = req.body;
+  const user = (req as any).user;
+  const userId = user.id;
+
+  if (!month || !year) {
+    return res.status(400).json({ error: 'Missing month or year parameters.' });
+  }
+
+  const userSupabase = getUserSupabase(req);
+
+  try {
+    const result = await generateMonthlyInsights(userSupabase, userId, Number(month), Number(year), workspaceId, familyId);
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error('Error in /api/ai/monthly-insights route:', error);
+    return res.status(500).json({ error: 'Internal AI insights calculation error' });
+  }
+});
+
+// 8. Anomaly Detection
+app.post('/api/ai/anomalies', authenticateUser, async (req, res) => {
+  const { amount, categoryName, merchant, paymentMethod, workspaceId } = req.body;
+  const user = (req as any).user;
+  const userId = user.id;
+
+  if (!amount || !categoryName) {
+    return res.status(400).json({ error: 'Missing required transaction metrics for anomaly checking.' });
+  }
+
+  const userSupabase = getUserSupabase(req);
+
+  try {
+    const result = await detectExpenseAnomaly(
+      userSupabase,
+      userId,
+      Number(amount),
+      categoryName,
+      merchant || '',
+      paymentMethod || 'other',
+      workspaceId
+    );
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error('Error in /api/ai/anomalies route:', error);
+    return res.status(500).json({ error: 'Internal anomaly detection error' });
+  }
+});
+
+// 9. Budget Recommendations
+app.post('/api/ai/budget-recommendation', authenticateUser, async (req, res) => {
+  const { workspaceId } = req.body;
+  const user = (req as any).user;
+  const userId = user.id;
+
+  const userSupabase = getUserSupabase(req);
+
+  try {
+    const result = await getBudgetRecommendations(userSupabase, userId, workspaceId);
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error('Error in /api/ai/budget-recommendation route:', error);
+    return res.status(500).json({ error: 'Internal budget recommendation error' });
+  }
+});
+
+// 10. Predict Category
+app.post('/api/ai/predict-category', authenticateUser, async (req, res) => {
+  const { merchant, title, notes, amount, categories } = req.body;
+  const user = (req as any).user;
+  const userId = user.id;
+
+  if (!amount || !categories) {
+    return res.status(400).json({ error: 'Missing predict parameters.' });
+  }
+
+  const userSupabase = getUserSupabase(req);
+
+  try {
+    const result = await predictExpenseCategory(merchant || '', title || '', notes || '', Number(amount), categories);
+    
+    // Save prediction query for analysis caching
+    await userSupabase.from('expense_predictions').insert({
+      user_id: userId,
+      merchant: merchant || '',
+      amount: Number(amount),
+      predicted_category_id: result.predicted_category_id,
+      confidence: result.confidence
+    });
+
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error('Error in /api/ai/predict-category route:', error);
+    return res.status(500).json({ error: 'Internal AI prediction error' });
+  }
+});
+
+// 11. Smart Search (Semantic Search)
+app.post('/api/ai/smart-search', authenticateUser, async (req, res) => {
+  const { queryText, limit } = req.body;
+  const user = (req as any).user;
+  const userId = user.id;
+
+  if (!queryText) {
+    return res.status(400).json({ error: 'Missing queryText.' });
+  }
+
+  const userSupabase = getUserSupabase(req);
+
+  try {
+    const matchingIds = await semanticSearchExpenses(userSupabase, userId, queryText, limit ? Number(limit) : 10);
+    return res.status(200).json({ expenseIds: matchingIds });
+  } catch (error) {
+    console.error('Error in /api/ai/smart-search route:', error);
+    return res.status(500).json({ error: 'Internal semantic search error' });
+  }
+});
+
+// 12. Explain Expense Details
+app.post('/api/ai/explain-expense', authenticateUser, async (req, res) => {
+  const { title, amount, categoryName, notes, merchant } = req.body;
+
+  if (!amount || !title) {
+    return res.status(400).json({ error: 'Missing transaction details.' });
+  }
+
+  try {
+    const prompt = `
+Give a friendly, concise (max 2 sentences) explanation and a micro financial tip for the following expense transaction.
+
+Transaction Details:
+- Title: ${title}
+- Amount: ₹${amount}
+- Category: ${categoryName || 'General'}
+- Merchant: ${merchant || 'N/A'}
+- Notes: ${notes || 'N/A'}
+
+Keep the tone encouraging and smart. Return only the plain explanation text.
+`;
+    const explanation = await runGeminiPrompt(prompt);
+    return res.status(200).json({ explanation });
+  } catch (error) {
+    console.error('Error in /api/ai/explain-expense route:', error);
+    return res.status(500).json({ error: 'Internal expense explanation error' });
+  }
+});
+
+// 13. Update Expense Embedding Vector
+app.post('/api/ai/update-embedding', authenticateUser, async (req, res) => {
+  const { expenseId, textContent } = req.body;
+  if (!expenseId || !textContent) {
+    return res.status(400).json({ error: 'Missing expenseId or textContent.' });
+  }
+
+  const userSupabase = getUserSupabase(req);
+
+  try {
+    await updateExpenseEmbedding(userSupabase, expenseId, textContent);
+    return res.status(200).json({ success: true, message: 'Expense embedding vector updated successfully.' });
+  } catch (error) {
+    console.error('Error in /api/ai/update-embedding route:', error);
+    return res.status(500).json({ error: 'Internal vector embedding update error' });
+  }
+});
+
 app.listen(port, () => {
   console.log(`🚀 Express server running on port ${port}`);
 });
+

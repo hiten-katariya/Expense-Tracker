@@ -7,15 +7,17 @@ import { useUIStore } from '@/stores/uiStore';
 import { useNotifications, useFamilies } from '@/hooks/useQueries';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import { LayoutDashboard, Receipt, FolderOpen, Target, ChartPie as PieChart, Settings, Users, LogOut, Menu, X, Bell, Search, Sun, Moon, Trash2, Activity } from 'lucide-react';
+import { LayoutDashboard, Receipt, FolderOpen, Target, ChartPie as PieChart, Settings, Users, LogOut, Menu, X, Bell, Search, Sun, Moon, Trash2, Activity, Sparkles } from 'lucide-react';
 import { IconButton } from './Button';
 import { SafeAvatar } from './Avatar';
+import { AIChatPanel } from '@/components/ai/AIChatPanel';
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, profile, workspace, signOut } = useAuthStore();
   const { darkMode, toggleDarkMode } = useUIStore();
   const [sidebarOpen, setSidebarOpen] = React.useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+  const [chatPanelOpen, setChatPanelOpen] = React.useState(false);
 
   const { data: notifications } = useNotifications(user?.id);
   const { data: families } = useFamilies(user?.id);
@@ -459,6 +461,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   )}
                 </IconButton>
               </Link>
+              <IconButton
+                onClick={() => setChatPanelOpen(true)}
+                className="text-primary-600 dark:text-primary-400 hover:bg-primary-500/10 p-2 rounded-xl relative group"
+                title="Ask AI Assistant"
+              >
+                <Sparkles className="h-5 w-5 animate-pulse" />
+              </IconButton>
 
               <div className="h-8 w-px bg-foreground/10" />
 
@@ -488,6 +497,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
           {children}
         </div>
       </main>
+
+      <AIChatPanel
+        userId={user?.id}
+        isOpen={chatPanelOpen}
+        onClose={() => setChatPanelOpen(false)}
+      />
     </div>
   );
 }

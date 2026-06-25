@@ -12,7 +12,7 @@ import { Button, IconButton } from '@/components/Button';
 import { Input, Select } from '@/components/Input';
 import { ExpenseRowSkeleton } from '@/components/Skeleton';
 import { AdvancedExpenseFilters } from '@/components/ExpenseFilters';
-import { DuplicateWarningModal } from '@/components/DuplicateWarningModal';
+import { DuplicateExpenseDialog } from '@/components/ai/DuplicateExpenseDialog';
 import { Modal } from '@/components/Modal';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { useUIStore } from '@/stores/uiStore';
@@ -22,10 +22,15 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import {
-  Plus, Search, ChevronLeft, ChevronRight, CreditCard as Edit2,
-  Trash2, Calendar, TriangleAlert as AlertTriangle, UploadCloud,
+  Plus, ChevronLeft, ChevronRight, CreditCard as Edit2,
+  Trash2, Calendar, UploadCloud, Sparkles,
 } from 'lucide-react';
 import { PAYMENT_METHODS } from '@/types';
+import { SmartSearchBar } from '@/components/ai/SmartSearchBar';
+import { useReceiptOCR } from '@/hooks/useReceiptOCR';
+import { ReceiptUploader } from '@/components/ai/ReceiptUploader';
+import { MerchantSuggestionBadge } from '@/components/ai/MerchantSuggestionBadge';
+import { AnomalyBadge } from '@/components/ai/AnomalyBadge';
 
 const expenseSchema = z.object({
   title: z.string().min(1, 'Title is required'),
@@ -44,7 +49,7 @@ const ITEMS_PER_PAGE = 20;
 export function ExpensesPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { workspace } = useAuthStore();
+  const { workspace, user } = useAuthStore();
   const workspaceId = workspace?.id;
   const addNotification = useUIStore((s) => s.addNotification);
 
@@ -141,20 +146,16 @@ export function ExpensesPage() {
       <Card>
         <CardContent className="p-4 space-y-3">
           <div className="flex flex-col sm:flex-row gap-3">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-foreground/40" />
-              <input
-                type="text"
-                placeholder="Search expenses..."
-                defaultValue={search}
-                onChange={(e) => {
-                  const params = new URLSearchParams(searchParams);
-                  if (e.target.value) params.set('search', e.target.value);
-                  else params.delete('search');
-                  params.set('page', '1');
-                  setSearchParams(params);
+            <div className="flex-1">
+              <SmartSearchBar
+                userId={user?.id || ''}
+                onSearchMatches={(matches) => {
+                  setAdvancedFilters((prev) => ({
+                    ...prev,
+                    expense_ids: matches || undefined,
+                  }));
                 }}
-                className="w-full rounded-xl border border-foreground/10 bg-background pl-10 pr-4 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                placeholder="Search expenses..."
               />
             </div>
             <Select
@@ -196,11 +197,7 @@ export function ExpensesPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-medium text-foreground truncate">{expense.title}</p>
-                      {expense.is_flagged && (
-                        <span className="text-red-500" title="Anomaly detected">
-                          <AlertTriangle className="h-4 w-4" />
-                        </span>
-                      )}
+                      <AnomalyBadge isAnomaly={!!expense.is_flagged} reason={expense.notes} />
                       {expense.import_source === 'csv' && (
                         <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400">CSV</span>
                       )}
@@ -321,6 +318,7 @@ export function ExpenseFormPage() {
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<ExpenseFormData>({
     resolver: zodResolver(expenseSchema),
@@ -333,6 +331,63 @@ export function ExpenseFormPage() {
       notes: expense?.notes || '',
     },
   });
+
+  const { scan: scanReceipt, isScanning } = useReceiptOCR();
+
+  const handleReceiptParsed = (parsedData: any) => {
+    if (parsedData.merchant) {
+      setValue('title', parsedData.merchant);
+    }
+    if (parsedData.amount) {
+      setValue('amount', parsedData.amount);
+    }
+    if (parsedData.date) {
+      setValue('expense_date', parsedData.date);
+    }
+    if (parsedData.categoryName) {
+      const category = categories?.find((c) => c.name.toLowerCase() === parsedData.categoryName.toLowerCase());
+      if (category) {
+        setValue('category_id', category.id);
+      }
+    }
+    if (parsedData.paymentMethod) {
+      setValue('payment_method', parsedData.paymentMethod as any);
+    }
+    if (parsedData.notes) {
+      setValue('notes', parsedData.notes);
+    }
+  };
+
+  const handleScanReceiptFile = async (base64Image: string) => {
+    return scanReceipt({
+      image: base64Image,
+      userId: profile!.id,
+      categories: categories?.map((c) => ({ id: c.id, name: c.name })) || [],
+    });
+  };
+
+  const [merchantSuggestion, setMerchantSuggestion] = useState<{ raw: string; canonical: string } | null>(null);
+
+  const checkMerchantAlias = async (rawName: string) => {
+    if (!rawName || rawName.trim().length < 3) return;
+    try {
+      const response = await fetch('/api/ai/merchant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: profile!.id, rawName }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.canonicalName && data.canonicalName.toLowerCase() !== rawName.toLowerCase()) {
+          setMerchantSuggestion({ raw: rawName, canonical: data.canonicalName });
+        } else {
+          setMerchantSuggestion(null);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching merchant alias:', err);
+    }
+  };
 
   const doSave = async (data: ExpenseFormData) => {
     const actionLabel = isEdit ? "Updating expense..." : "Adding expense...";
@@ -405,15 +460,47 @@ export function ExpenseFormPage() {
         </p>
       </div>
 
+      {!isEdit && (
+        <Card className="border border-primary-500/10 bg-primary-500/5">
+          <CardContent className="p-4">
+            <h3 className="text-sm font-bold text-foreground mb-3 flex items-center gap-1.5">
+              <Sparkles className="h-4 w-4 text-primary-500 animate-pulse" />
+              Autofill Form with Receipt Scan
+            </h3>
+            <ReceiptUploader
+              onParsed={handleReceiptParsed}
+              isScanning={isScanning}
+              onScanFile={handleScanReceiptFile}
+            />
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardContent className="p-6">
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-            <Input
-              label="Title *"
-              placeholder="e.g., Grocery shopping at Big Bazaar"
-              error={errors.title?.message}
-              {...register('title')}
-            />
+            <div className="space-y-1">
+              <Input
+                label="Title *"
+                placeholder="e.g., Grocery shopping at Big Bazaar"
+                error={errors.title?.message}
+                {...register('title', {
+                  onBlur: (e) => checkMerchantAlias(e.target.value),
+                })}
+              />
+              {merchantSuggestion && (
+                <div className="mt-1 flex justify-start">
+                  <MerchantSuggestionBadge
+                    rawName={merchantSuggestion.raw}
+                    canonicalName={merchantSuggestion.canonical}
+                    onClick={(name) => {
+                      setValue('title', name);
+                      setMerchantSuggestion(null);
+                    }}
+                  />
+                </div>
+              )}
+            </div>
 
             <div className="grid grid-cols-2 gap-4">
               <Input
@@ -469,18 +556,15 @@ export function ExpenseFormPage() {
       </Card>
 
       {/* Duplicate Warning Modal */}
-      {duplicateExpense && (
-        <DuplicateWarningModal
-          isOpen={!!duplicateExpense}
-          existingExpense={duplicateExpense}
-          confidenceScore={1}
-          onKeepBoth={async () => {
-            setDuplicateExpense(null);
-            if (pendingData) await doSave(pendingData);
-          }}
-          onCancel={() => { setDuplicateExpense(null); setPendingData(null); }}
-        />
-      )}
+      <DuplicateExpenseDialog
+        isOpen={!!duplicateExpense}
+        onClose={() => { setDuplicateExpense(null); setPendingData(null); }}
+        onConfirm={async () => {
+          setDuplicateExpense(null);
+          if (pendingData) await doSave(pendingData);
+        }}
+        duplicateExpense={duplicateExpense}
+      />
     </div>
   );
 }

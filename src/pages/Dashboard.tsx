@@ -2,8 +2,14 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuthStore } from '@/stores/authStore';
 import { useMonthlySummary, useExpenses, useCategories, useNotifications } from '@/hooks/useQueries';
+import { useAIInsights } from '@/hooks/useAIInsights';
+import { useAICategorization } from '@/hooks/useAICategorization';
+import { AIInsightCard } from '@/components/ai/AIInsightCard';
+import { ExpenseSuggestionCard } from '@/components/ai/ExpenseSuggestionCard';
 import { TextReveal } from '@/components/ui/cascade-text';
+import { toast } from 'sonner';
 import { Button } from '@/components/Button';
+import type { AICategorization } from '@/types';
 import { StatCardSkeleton, ExpenseRowSkeleton } from '@/components/Skeleton';
 import { formatCurrency, formatDate, cn, sanitizeName } from '@/lib/utils';
 import { Plus, TrendingUp, TrendingDown, Wallet, Layers, ArrowRight, Sparkles, Activity, Target, Bell, CircleAlert as AlertCircle } from 'lucide-react';
@@ -98,8 +104,51 @@ export function Dashboard() {
     date_to: `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${new Date(currentYear, currentMonth + 1, 0).getDate()}`,
   }, 1, 200);
 
+  const { insights, isLoading: insightsLoading, refetch: refetchInsights } = useAIInsights(
+    user?.id,
+    currentMonth + 1,
+    currentYear,
+    workspaceId,
+    null
+  );
+
   const { data: notifications } = useNotifications(user?.id);
   const unreadCount = notifications?.filter((n) => !n.is_read).length || 0;
+
+  const { suggestions, accept: acceptSuggestion, reject: rejectSuggestion } = useAICategorization(user?.id);
+
+  const handleAcceptSuggestion = async (suggestion: AICategorization) => {
+    if (!suggestion.expense_id) return;
+    const toastId = toast.loading('Applying AI category...');
+    try {
+      const category = categories?.find((c) => c.name.toLowerCase() === suggestion.suggested_category.toLowerCase());
+      if (!category) {
+        throw new Error(`Category "${suggestion.suggested_category}" not found. Please create it first.`);
+      }
+      await acceptSuggestion({
+        categorizationId: suggestion.id,
+        expenseId: suggestion.expense_id,
+        categoryId: category.id,
+        categoryName: category.name,
+      });
+      toast.success('Category suggestion applied successfully!', { id: toastId });
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to apply category', { id: toastId });
+    }
+  };
+
+  const handleRejectSuggestion = async (suggestion: AICategorization) => {
+    const toastId = toast.loading('Rejecting AI category suggestion...');
+    try {
+      await rejectSuggestion({
+        categorizationId: suggestion.id,
+        expenseId: suggestion.expense_id,
+      });
+      toast.success('Suggestion ignored', { id: toastId });
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to reject suggestion', { id: toastId });
+    }
+  };
 
   const tooltipStyle = {
     background: darkMode ? 'rgba(15,23,42,0.95)' : 'rgba(255,255,255,0.95)',
@@ -221,6 +270,34 @@ export function Dashboard() {
           delay={3}
         />
       </div>
+
+      {/* ── AI Insights ── */}
+      <AIInsightCard
+        insights={insights}
+        isLoading={insightsLoading}
+        monthName={monthName}
+        onRefresh={refetchInsights}
+      />
+
+      {/* ── AI Categorization Suggestions ── */}
+      {suggestions && suggestions.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-primary-500 animate-pulse" />
+            <h3 className="text-lg font-bold text-foreground">AI Category Review Queue</h3>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {suggestions.map((suggestion) => (
+              <ExpenseSuggestionCard
+                key={suggestion.id}
+                suggestion={suggestion}
+                onAccept={handleAcceptSuggestion}
+                onReject={handleRejectSuggestion}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── Charts Row ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

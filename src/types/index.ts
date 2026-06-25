@@ -75,6 +75,11 @@ export interface Expense {
   receipt_url: string | null;
   ai_category_suggestion: string | null;
   ai_confidence: number | null;
+  ai_category?: string | null;
+  ai_reviewed?: boolean;
+  ai_reasoning?: string | null;
+  receipt_hash?: string | null;
+  ai_processed?: boolean;
   is_recurring: boolean;
   recurring_interval: 'daily' | 'weekly' | 'monthly' | 'yearly' | null;
   is_flagged: boolean;
@@ -251,3 +256,47 @@ export const CURRENCIES = [
   { code: 'GBP', symbol: '£', name: 'British Pound' },
   { code: 'AED', symbol: 'د.إ', name: 'UAE Dirham' },
 ] as const;
+
+export interface AICategorization {
+  id: string;
+  user_id: string;
+  workspace_id: string | null;
+  family_id: string | null;
+  expense_id: string | null;
+  suggested_category: string;
+  confidence: number;
+  reasoning: string | null;
+  status: 'pending' | 'accepted' | 'rejected';
+  created_at: string;
+}
+
+export interface AIInsight {
+  summary: string;
+  savings_opportunities: Array<{
+    title: string;
+    description: string;
+    expected_saving: number;
+  }>;
+  category_trends: Array<{
+    category: string;
+    trend: 'up' | 'down' | 'stable';
+    explanation: string;
+  }>;
+}
+
+export interface AIChatMessage {
+  id?: string;
+  role: 'user' | 'assistant' | 'system';
+  message: string;
+  created_at?: string;
+}
+
+export interface BudgetRecommendation {
+  categoryId: string;
+  categoryName: string;
+  currentLimit: number;
+  averageSpend: number;
+  recommendedLimit: number;
+  reason: string;
+}
+
