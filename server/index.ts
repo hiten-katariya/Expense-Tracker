@@ -3,6 +3,9 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import { createClient } from '@supabase/supabase-js';
+import { startEmailQueueWorker } from './email/email.queue.js';
+import { startNotificationWorker } from './email/notification.worker.js';
+import { queueEmail } from './email/email.service.js';
 import {
   sendVerificationEmail,
   sendWelcomeEmail,
@@ -1212,6 +1215,312 @@ app.post('/api/ai/update-embedding', authenticateUser, async (req, res) => {
     return res.status(500).json({ error: 'Internal vector embedding update error' });
   }
 });
+
+// --- EMAIL PREFERENCES & DIAGNOSTICS ROUTES ---
+
+// Get Email Preferences
+app.get('/api/email/preferences', authenticateUser, async (req, res) => {
+  const user = (req as any).user;
+  const userSupabase = getUserSupabase(req);
+
+  try {
+    const { data, error } = await userSupabase
+      .from('email_preferences')
+      .select('*')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error fetching preferences:', error);
+      return res.status(500).json({ error: error.message });
+    }
+
+    const defaultPrefs = {
+      marketing_emails: true,
+      budget_emails: true,
+      family_emails: true,
+      workspace_emails: true,
+      ai_emails: true,
+      monthly_reports: true,
+      weekly_reports: true,
+      security_emails: true,
+    };
+
+    return res.status(200).json({ data: data || defaultPrefs });
+  } catch (error) {
+    console.error('Preferences GET route error:', error);
+    return res.status(500).json({ error: 'Failed to retrieve email preferences' });
+  }
+});
+
+// Update Email Preferences
+app.put('/api/email/preferences', authenticateUser, async (req, res) => {
+  const user = (req as any).user;
+  const userSupabase = getUserSupabase(req);
+
+  try {
+    const { data, error } = await userSupabase
+      .from('email_preferences')
+      .upsert({
+        user_id: user.id,
+        ...req.body,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'user_id' })
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error saving email preferences:', error);
+      return res.status(500).json({ error: error.message });
+    }
+
+    return res.status(200).json({ data });
+  } catch (error) {
+    console.error('Preferences PUT route error:', error);
+    return res.status(500).json({ error: 'Failed to update email preferences' });
+  }
+});
+
+// Test/Send Email Template Endpoint (admin/dev testing)
+app.post('/api/test/send-email', authenticateUser, async (req, res) => {
+  const { recipient, templateName, payload } = req.body;
+  const user = (req as any).user;
+  
+  if (!recipient || !templateName) {
+    return res.status(400).json({ error: 'Recipient and templateName are required.' });
+  }
+
+  const userSupabase = getUserSupabase(req);
+
+  try {
+    const queued = await queueEmail(
+      userSupabase,
+      user.id,
+      recipient,
+      templateName,
+      payload?.subject || `Test Email: ${templateName}`,
+      payload || {}
+    );
+
+    if (queued) {
+      return res.status(200).json({ success: true, message: `Email for template "${templateName}" successfully enqueued.` });
+    } else {
+      return res.status(500).json({ error: 'Failed to enqueue email. Check logs or rate limits.' });
+    }
+  } catch (error: any) {
+    console.error('Email test endpoint error:', error);
+    return res.status(500).json({ error: error.message || 'Internal test email enqueue failure.' });
+  }
+});
+
+// Alias endpoint for /api/test/email
+app.post('/api/test/email', authenticateUser, async (req, res) => {
+  const { recipient, templateName, payload } = req.body;
+  const user = (req as any).user;
+  
+  if (!recipient || !templateName) {
+    return res.status(400).json({ error: 'Recipient and templateName are required.' });
+  }
+
+  const userSupabase = getUserSupabase(req);
+
+  try {
+    const queued = await queueEmail(
+      userSupabase,
+      user.id,
+      recipient,
+      templateName,
+      payload?.subject || `Test Email: ${templateName}`,
+      payload || {}
+    );
+
+    if (queued) {
+      return res.status(200).json({ success: true, message: `Email for template "${templateName}" successfully enqueued.` });
+    } else {
+      return res.status(500).json({ error: 'Failed to enqueue email. Check logs or rate limits.' });
+    }
+  } catch (error: any) {
+    console.error('Email test endpoint error:', error);
+    return res.status(500).json({ error: error.message || 'Internal test email enqueue failure.' });
+  }
+});
+
+// Test/Send Budget Email Endpoint
+app.post('/api/test/send-budget-email', authenticateUser, async (req, res) => {
+  const { recipient, templateName, categoryName, oldLimit, newLimit, limit, startsOn } = req.body;
+  const user = (req as any).user;
+  
+  if (!recipient || !templateName) {
+    return res.status(400).json({ error: 'Recipient and templateName are required.' });
+  }
+
+  const userSupabase = getUserSupabase(req);
+
+  try {
+    const payload: any = {
+      categoryName: categoryName || 'Overall',
+      startsOn: startsOn || new Date().toISOString().split('T')[0]
+    };
+
+    if (templateName === 'Budget Created') {
+      payload.limit = limit || 5000;
+    } else if (templateName === 'Budget Updated') {
+      payload.oldLimit = oldLimit || 4000;
+      payload.newLimit = newLimit || 5000;
+    } else if (templateName === 'Budget Deleted') {
+      payload.limit = limit || 5000;
+    }
+
+    const queued = await queueEmail(
+      userSupabase,
+      user.id,
+      recipient,
+      templateName,
+      `Budget Alert: limit for ${categoryName || 'Category'}`,
+      payload
+    );
+
+    if (queued) {
+      return res.status(200).json({ success: true, message: `Budget email for template "${templateName}" successfully enqueued.` });
+    } else {
+      return res.status(500).json({ error: 'Failed to enqueue budget email.' });
+    }
+  } catch (error: any) {
+    console.error('Budget email test endpoint error:', error);
+    return res.status(500).json({ error: error.message || 'Internal budget email enqueue failure.' });
+  }
+});
+
+// Test/Send All Email Templates Endpoint
+app.post('/api/test/all-email-templates', authenticateUser, async (req, res) => {
+  const { recipient } = req.body;
+  const user = (req as any).user;
+  const targetEmail = recipient || user.email;
+
+  if (!targetEmail) {
+    return res.status(400).json({ error: 'Recipient is required.' });
+  }
+
+  const userSupabase = getUserSupabase(req);
+  const templates = [
+    'Welcome',
+    'Verify Email',
+    'Password Reset',
+    'Registration Successful',
+    'Login From New Device',
+    'Password Changed',
+    'Budget Created',
+    'Budget Updated',
+    'Budget Deleted',
+    'Budget Threshold 50%',
+    'Budget Threshold 75%',
+    'Budget Threshold 90%',
+    'Budget Exceeded',
+    'Workspace Invitation',
+    'Workspace Invitation Accepted',
+    'Workspace Invitation Declined',
+    'Workspace Member Removed',
+    'Family Created',
+    'Family Invitation',
+    'Family Invitation Accepted',
+    'Family Invitation Declined',
+    'Family Member Joined',
+    'Family Member Removed',
+    'Family Ownership Transferred',
+    'Family Budget Created',
+    'Family Budget Updated',
+    'Family Budget Deleted',
+    'Family Expense Created',
+    'Family Expense Updated',
+    'Family Expense Deleted',
+    'Family Expense Restored',
+    'Family Deleted',
+    'AI Receipt Processed',
+    'AI Category Suggested',
+    'AI Category Accepted',
+    'AI Monthly Insights Ready',
+    'AI Spending Anomaly',
+    'AI Savings Opportunity',
+    'Recurring Expense Created',
+    'Recurring Expense Executed',
+    'Recurring Expense Failed',
+    'CSV Import Completed',
+    'CSV Import Failed',
+    'CSV Export Ready',
+    'PDF Export Ready',
+    'Monthly Financial Report',
+    'Weekly Financial Report',
+    'Yearly Financial Summary',
+    'Notification Digest',
+    'Account Deleted',
+    'Account Recovery',
+    'Security Alert',
+    'Two Factor Enabled',
+    'Two Factor Disabled',
+    'Subscription Activated',
+    'Subscription Renewed',
+    'Subscription Cancelled',
+    'Trial Ending',
+    'General System Notification'
+  ];
+
+  try {
+    const results = [];
+    for (const templateName of templates) {
+      const payload: any = {
+        name: 'John Doe',
+        token: 'mock-token-xyz-123',
+        device: 'Chrome 125.0 / Windows 11',
+        ip: '192.168.1.1',
+        categoryName: 'Groceries',
+        limit: 5000,
+        startsOn: '2026-07-01',
+        oldLimit: 4000,
+        newLimit: 5000,
+        threshold: 90,
+        budgetName: 'Groceries',
+        current: 4600,
+        title: 'Supermarket purchase',
+        amount: 250,
+        date: '2026-06-25',
+        notes: 'Weekly shopping',
+        oldAmount: 200,
+        oldTitle: 'Supermarket shopping',
+        inviterName: 'Jane Doe',
+        familyName: 'Doe Family',
+        inviteUrl: 'http://localhost:5173/family/invite',
+        inviteeName: 'Bob Smith',
+        memberName: 'Alice Johnson',
+        merchant: 'Costco',
+        explanation: 'Spending at Costco is 200% higher than your average grocery transaction.',
+        month: 'June 2026',
+        totalSpent: 1250,
+        savings: 500,
+        downloadUrl: 'http://localhost:5173/downloads/report',
+        message: 'This is a general system notification from the Expenso system administrators.'
+      };
+
+      const queued = await queueEmail(
+        userSupabase,
+        user.id,
+        targetEmail,
+        templateName,
+        `Test Email: ${templateName}`,
+        payload
+      );
+      results.push({ templateName, queued });
+    }
+
+    return res.status(200).json({ success: true, results });
+  } catch (error: any) {
+    console.error('All email templates test endpoint error:', error);
+    return res.status(500).json({ error: error.message || 'Internal failure enqueuing all templates.' });
+  }
+});
+
+// Initialize background workers
+startEmailQueueWorker();
+startNotificationWorker();
 
 app.listen(port, () => {
   console.log(`🚀 Express server running on port ${port}`);

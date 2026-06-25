@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS public.email_logs (
     recipient text NOT NULL,
     template_name text NOT NULL,
     subject text NOT NULL,
-    status text NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'sent', 'failed', 'skipped', 'opened', 'clicked')),
+    status text NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'processing', 'sent', 'failed', 'skipped', 'opened', 'clicked')),
     retry_count integer NOT NULL DEFAULT 0 CHECK (retry_count >= 0),
     error_message text,
     payload jsonb,
@@ -54,10 +54,62 @@ FOR SELECT
 TO authenticated
 USING (
     auth.uid() = user_id 
-    OR recipient = (SELECT email FROM auth.users WHERE id = auth.uid() LIMIT 1)
+    OR recipient = (SELECT email FROM public.profiles WHERE id = auth.uid() LIMIT 1)
 );
 
 -- 3. Create indices for performance optimization
 CREATE INDEX IF NOT EXISTS idx_email_logs_status_retry ON public.email_logs(status, retry_count);
 CREATE INDEX IF NOT EXISTS idx_email_logs_recipient ON public.email_logs(recipient);
 CREATE INDEX IF NOT EXISTS idx_email_logs_user_id ON public.email_logs(user_id);
+
+-- 4. Create queue RPC helper functions for background workers (security definer bypasses RLS)
+CREATE OR REPLACE FUNCTION public.fetch_and_lock_queued_emails(p_limit int, p_secret text)
+RETURNS SETOF public.email_logs
+SECURITY DEFINER
+AS $$
+BEGIN
+    IF p_secret IS NULL OR p_secret != 'd8f346b9-38b8-4d56-b09e-711e1e974e64' THEN
+        RAISE EXCEPTION 'Unauthorized queue access';
+    END IF;
+
+    RETURN QUERY
+    UPDATE public.email_logs
+    SET status = 'processing',
+        updated_at = now()
+    WHERE id IN (
+        SELECT id 
+        FROM public.email_logs
+        WHERE status = 'queued' AND retry_count < 3
+        ORDER BY created_at ASC
+        LIMIT p_limit
+        FOR UPDATE SKIP LOCKED
+    )
+    RETURNING *;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION public.update_email_log_status(
+    p_id uuid,
+    p_status text,
+    p_retry_count int,
+    p_error_message text,
+    p_resend_id text,
+    p_secret text
+)
+RETURNS void
+SECURITY DEFINER
+AS $$
+BEGIN
+    IF p_secret IS NULL OR p_secret != 'd8f346b9-38b8-4d56-b09e-711e1e974e64' THEN
+        RAISE EXCEPTION 'Unauthorized queue access';
+    END IF;
+
+    UPDATE public.email_logs
+    SET status = p_status,
+        retry_count = p_retry_count,
+        error_message = p_error_message,
+        resend_id = p_resend_id,
+        updated_at = now()
+    WHERE id = p_id;
+END;
+$$ LANGUAGE plpgsql;

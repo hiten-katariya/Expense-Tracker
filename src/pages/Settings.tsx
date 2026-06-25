@@ -97,6 +97,75 @@ export function SettingsPage() {
   const [isResending, setIsResending] = useState(false);
   const [cooldown, setCooldown] = useState(0);
 
+  const [emailPrefs, setEmailPrefs] = useState<Record<string, boolean>>({
+    marketing_emails: true,
+    budget_emails: true,
+    family_emails: true,
+    workspace_emails: true,
+    ai_emails: true,
+    monthly_reports: true,
+    weekly_reports: true,
+    security_emails: true,
+  });
+  const [isLoadingPrefs, setIsLoadingPrefs] = useState(true);
+  const [showEmailPrefs, setShowEmailPrefs] = useState(false);
+
+  useEffect(() => {
+    async function fetchPreferences() {
+      try {
+        const response = await fetch('/api/email/preferences');
+        if (response.ok) {
+          const json = await response.json();
+          if (json.data) {
+            setEmailPrefs(json.data);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load email preferences:', err);
+      } finally {
+        setIsLoadingPrefs(false);
+      }
+    }
+    if (user) {
+      fetchPreferences();
+    }
+  }, [user]);
+
+  const handleTogglePref = async (key: string) => {
+    if (key === 'security_emails') return;
+    
+    const updatedPrefs = {
+      ...emailPrefs,
+      [key]: !emailPrefs[key]
+    };
+    
+    setEmailPrefs(updatedPrefs);
+    
+    try {
+      const response = await fetch('/api/email/preferences', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedPrefs)
+      });
+      
+      if (!response.ok) throw new Error('Failed to save preferences');
+      
+      addNotification({
+        type: 'success',
+        title: 'Preferences Updated',
+        message: 'Your email notification channels have been modified successfully.'
+      });
+    } catch (err: any) {
+      // Revert state
+      setEmailPrefs(emailPrefs);
+      addNotification({
+        type: 'error',
+        title: 'Save Error',
+        message: 'Could not sync preferences with the server.'
+      });
+    }
+  };
+
   useEffect(() => {
     if (cooldown > 0) {
       const t = setTimeout(() => setCooldown(cooldown - 1), 1000);
@@ -283,16 +352,60 @@ export function SettingsPage() {
             </button>
           }
         />
-        <SettingRow
-          icon={<Bell className="h-4 w-4" />}
-          title="Email Notifications"
-          description="Budget alerts, weekly summaries, and spending insights."
-          action={
-            <button className="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-primary-500 transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500/50">
-              <span className="pointer-events-none inline-block h-5 w-5 transform translate-x-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out" />
-            </button>
-          }
-        />
+        <div className="border-t border-foreground/5">
+          <SettingRow
+            icon={<Bell className="h-4 w-4" />}
+            title="Email Notifications"
+            description="Manage granular opt-out configurations for budgets, summaries, and AI recommendations."
+            action={
+              <Button size="sm" variant="secondary" onClick={() => setShowEmailPrefs(!showEmailPrefs)}>
+                {showEmailPrefs ? 'Hide Preferences' : 'Configure Preferences'}
+              </Button>
+            }
+          />
+          {showEmailPrefs && (
+            <div className="px-5 pb-5 pt-1 bg-foreground/[0.01] divide-y divide-foreground/5 space-y-4">
+              <p className="text-[11px] font-bold text-foreground/45 uppercase tracking-widest mb-4 mt-2">Email Preferences Center</p>
+              {isLoadingPrefs ? (
+                <div className="flex items-center justify-center py-6 text-foreground/40 text-xs gap-2 font-medium">
+                  <Loader className="h-4 w-4 animate-spin text-primary-500" />
+                  <span>Loading preferences from server...</span>
+                </div>
+              ) : (
+                [
+                  { key: 'budget_emails', label: 'Budget Alerts', desc: 'Alerts when your spending reaches limits.' },
+                  { key: 'family_emails', label: 'Family Hub', desc: 'Updates on shared budget limits and invites.' },
+                  { key: 'workspace_emails', label: 'Workspace Alerts', desc: 'Invites and actions on co-owned workspaces.' },
+                  { key: 'ai_emails', label: 'Gemini AI Insights & OCR', desc: 'OCR scans, merchant maps, and anomaly alerts.' },
+                  { key: 'monthly_reports', label: 'Monthly Summaries', desc: 'PDF financial reports generated at month end.' },
+                  { key: 'weekly_reports', label: 'Weekly Digests', desc: 'Total spend reviews delivered every Sunday.' },
+                  { key: 'marketing_emails', label: 'Marketing Updates', desc: 'Product news, tips, and financial advice.' },
+                  { key: 'security_emails', label: 'Security & Auth', desc: 'Confirmations, logins, and resets. (Always enabled)', disabled: true }
+                ].map(({ key, label, desc, disabled }) => (
+                  <div key={key} className="flex items-center justify-between py-3">
+                    <div>
+                      <p className="text-xs font-semibold text-foreground">{label}</p>
+                      <p className="text-[10px] text-foreground/40 mt-0.5">{desc}</p>
+                    </div>
+                    <button
+                      disabled={disabled}
+                      onClick={() => handleTogglePref(key)}
+                      className={`relative inline-flex h-5.5 w-10 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                        disabled 
+                          ? 'bg-emerald-500/80 cursor-not-allowed' 
+                          : (emailPrefs[key] ? 'bg-primary-500' : 'bg-foreground/15')
+                      }`}
+                    >
+                      <span className={`pointer-events-none inline-block h-4.5 w-4.5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                        disabled || emailPrefs[key] ? 'translate-x-4.5' : 'translate-x-0'
+                      }`} />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
       </SectionCard>
 
       {/* Danger Zone */}
