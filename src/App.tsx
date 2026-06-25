@@ -18,6 +18,17 @@ import { CategoriesPage } from '@/pages/Categories';
 import { BudgetsPage } from '@/pages/Budgets';
 import { ReportsPage } from '@/pages/Reports';
 import { FamilyPage } from '@/pages/Family';
+import { FamilyDashboardPage } from '@/pages/FamilyDashboard';
+import { FamilyMembersPage } from '@/pages/FamilyMembers';
+import { FamilyInvitesPage } from '@/pages/FamilyInvites';
+import { FamilyExpensesPage } from '@/pages/FamilyExpenses';
+import { FamilyBudgetsPage } from '@/pages/FamilyBudgets';
+import { FamilyReportsPage } from '@/pages/FamilyReports';
+import { FamilySettingsPage } from '@/pages/FamilySettings';
+import { FamilyJoinPage } from '@/pages/FamilyJoin';
+import { FamilyExpenseFormPage } from '@/pages/FamilyExpenseForm';
+import { FamilyTrashPage } from '@/pages/FamilyTrash';
+import { FamilyActivityPage } from '@/pages/FamilyActivity';
 import { SettingsPage } from '@/pages/Settings';
 import { TrashPage } from '@/pages/Trash';
 import { CsvImportPage } from '@/pages/CsvImport';
@@ -222,6 +233,126 @@ function AppRoutes() {
           <ProtectedRoute>
             <Layout>
               <FamilyPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/family/join"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <FamilyJoinPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/family/expenses/new"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <FamilyExpenseFormPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/family/expenses/edit/:id"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <FamilyExpenseFormPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/family/trash"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <FamilyTrashPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/family/activity"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <FamilyActivityPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/family/dashboard"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <FamilyDashboardPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/family/members"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <FamilyMembersPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/family/invites"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <FamilyInvitesPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/family/expenses"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <FamilyExpensesPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/family/budgets"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <FamilyBudgetsPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/family/reports"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <FamilyReportsPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/family/settings"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <FamilySettingsPage />
             </Layout>
           </ProtectedRoute>
         }

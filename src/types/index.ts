@@ -59,7 +59,7 @@ export interface Category {
 
 export interface Expense {
   id: string;
-  workspace_id: string;
+  workspace_id: string | null;
   family_id: string | null;
   user_id: string;
   category_id: string | null;
@@ -104,7 +104,7 @@ export interface FamilyMember {
   id: string;
   family_id: string;
   profile_id: string;
-  member_role: 'admin' | 'member';
+  member_role: 'owner' | 'admin' | 'member';
   display_name: string | null;
   joined_at: string;
   created_at: string;
@@ -125,7 +125,7 @@ export interface FamilyInvite {
 
 export interface Budget {
   id: string;
-  workspace_id: string;
+  workspace_id: string | null;
   category_id: string | null;
   family_id: string | null;
   created_by: string | null;

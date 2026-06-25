@@ -1,19 +1,19 @@
 import React from 'react';
 import { useAuthStore } from '@/stores/authStore';
-import { useFamilies, useFamilyMembers, useCreateFamily } from '@/hooks/useQueries';
+import { useFamilies, useFamilyMembers, useCreateFamily, useFamilyBudgets } from '@/hooks/useQueries';
 import { TextReveal } from '@/components/ui/cascade-text';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/Card';
 import { Button, IconButton } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { Modal } from '@/components/Modal';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency, formatDate, sanitizeName } from '@/lib/utils';
 import { useUIStore } from '@/stores/uiStore';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { supabase } from '@/lib/supabase';
-import { Plus, Users, Copy, Check, Mail, Send, UserPlus } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Plus, Users, Copy, Check, Mail, Send, UserPlus, Sparkles } from 'lucide-react';
+import { Link, Navigate } from 'react-router-dom';
 
 const familySchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -38,6 +38,7 @@ export function FamilyPage() {
   const [copiedInviteCode, setCopiedInviteCode] = React.useState(false);
 
   const { data: families, isLoading: familiesLoading } = useFamilies(user?.id);
+
   const { data: members, isLoading: membersLoading } = useFamilyMembers(activeFamilyId);
 
   const createFamily = useCreateFamily();
@@ -103,12 +104,19 @@ export function FamilyPage() {
   };
 
   const currentFamily = families?.[0] || null;
+  const { data: familyBudgets } = useFamilyBudgets(currentFamily?.id);
+  const overallBudgetRecord = familyBudgets?.find((b) => b.category_id === null);
+  const familyMonthlyBudget = overallBudgetRecord?.amount || 0;
 
   React.useEffect(() => {
     if (families && families.length > 0 && !activeFamilyId) {
       setActiveFamilyId(families[0].id);
     }
   }, [families, activeFamilyId]);
+
+  if (!familiesLoading && families && families.length > 0) {
+    return <Navigate to="/family/dashboard" replace />;
+  }
 
   return (
     <div className="space-y-6">
@@ -162,7 +170,7 @@ export function FamilyPage() {
                 <div>
                   <p className="text-sm text-foreground/60">Monthly Budget</p>
                   <p className="text-2xl font-bold text-foreground">
-                    {currentFamily.monthly_budget ? formatCurrency(currentFamily.monthly_budget) : 'Not set'}
+                    {familyMonthlyBudget ? formatCurrency(familyMonthlyBudget) : 'Not set'}
                   </p>
                 </div>
                 <div>
@@ -208,17 +216,17 @@ export function FamilyPage() {
                       {member.profile_id === user?.id ? (
                         <Link to="/settings" className="h-10 w-10 rounded-full bg-primary-500/10 hover:bg-primary-500/20 flex items-center justify-center text-primary-500 font-semibold transition-all hover:scale-105 shadow-sm block">
                           <span className="flex items-center justify-center h-full w-full">
-                            {member.profile?.full_name?.charAt(0).toUpperCase() || member.profile?.email?.charAt(0).toUpperCase()}
+                            {sanitizeName(member.profile?.full_name).charAt(0).toUpperCase() || member.profile?.email?.charAt(0).toUpperCase()}
                           </span>
                         </Link>
                       ) : (
                         <div className="h-10 w-10 rounded-full bg-primary-500/10 flex items-center justify-center text-primary-500 font-semibold">
-                          {member.profile?.full_name?.charAt(0).toUpperCase() || member.profile?.email?.charAt(0).toUpperCase()}
+                          {sanitizeName(member.profile?.full_name).charAt(0).toUpperCase() || member.profile?.email?.charAt(0).toUpperCase()}
                         </div>
                       )}
                       <div className="flex-1">
                         <p className="text-sm font-medium text-foreground">
-                          {member.profile?.full_name || 'Unknown'}
+                          {sanitizeName(member.profile?.full_name) || 'Unknown'}
                           {member.profile_id === user?.id && (
                             <span className="ml-2 text-xs text-primary-500">(You)</span>
                           )}
@@ -272,18 +280,39 @@ export function FamilyPage() {
           </Card>
         </>
       ) : (
-        <Card>
-          <CardContent className="py-16 text-center">
-            <Users className="h-16 w-16 mx-auto text-foreground/30 mb-4" />
-            <p className="text-lg text-foreground/85">No family group yet</p>
-            <p className="text-sm text-foreground/60 mt-1 mb-6">
-              Create a family group to share expenses with your loved ones
-            </p>
-            <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setIsCreateModalOpen(true)}>
-              Create Family
-            </Button>
-          </CardContent>
-        </Card>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto py-12">
+          {/* Create Family Card */}
+          <Card className="relative overflow-hidden border border-white/10 dark:border-white/8 bg-white/60 dark:bg-white/[0.03] backdrop-blur-xl shadow-glass flex flex-col justify-between group">
+            <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-purple-500 to-indigo-500" />
+            <CardContent className="p-8 text-center flex flex-col items-center justify-center flex-1">
+              <Users className="h-12 w-12 text-purple-500 mb-4 group-hover:scale-105 transition-transform" />
+              <h3 className="text-lg font-bold text-foreground mb-2">Create Family</h3>
+              <p className="text-sm text-foreground/60 mb-6">
+                Start a new family group, set budget ceilings, and invite your loved ones to track expenses together.
+              </p>
+              <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setIsCreateModalOpen(true)} className="w-full bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 border-0 text-white shadow-md">
+                Create Group
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Join Family Card */}
+          <Card className="relative overflow-hidden border border-white/10 dark:border-white/8 bg-white/60 dark:bg-white/[0.03] backdrop-blur-xl shadow-glass flex flex-col justify-between group">
+            <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-indigo-500 to-blue-500" />
+            <CardContent className="p-8 text-center flex flex-col items-center justify-center flex-1">
+              <Sparkles className="h-12 w-12 text-indigo-500 mb-4 group-hover:scale-105 transition-transform" />
+              <h3 className="text-lg font-bold text-foreground mb-2">Join Family</h3>
+              <p className="text-sm text-foreground/60 mb-6">
+                Have an invite code or email invite link? Join an existing family group to instantly see shared budgets and log expenses.
+              </p>
+              <Link to="/family/join" className="w-full">
+                <Button variant="secondary" className="w-full border border-foreground/10 hover:bg-foreground/5 shadow-sm">
+                  Join Group
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {/* Create Family Modal */}

@@ -14,7 +14,8 @@ import {
 } from 'lucide-react';
 import { CURRENCIES } from '@/types';
 import { supabase, updateProfile } from '@/lib/supabase';
-import { cn } from '@/lib/utils';
+import { cn, sanitizeName } from '@/lib/utils';
+import { SafeAvatar } from '@/components/Avatar';
 
 const profileSchema = z.object({
   full_name: z.string().min(2, 'Name must be at least 2 characters').optional().nullable(),
@@ -106,7 +107,7 @@ export function SettingsPage() {
   const { register, handleSubmit, formState: { errors, isSubmitting, isDirty } } = useForm<ProfileFormData>({
     resolver: zodResolver(profileSchema),
     defaultValues: {
-      full_name: profile?.full_name || '',
+      full_name: sanitizeName(profile?.full_name) || '',
       currency_code: profile?.currency_code || 'INR',
       phone_number: profile?.phone_number || '',
       city: profile?.city || '',
@@ -153,8 +154,6 @@ export function SettingsPage() {
     }
   };
 
-  const avatarLetter = profile?.full_name?.charAt(0).toUpperCase() || profile?.email?.charAt(0).toUpperCase() || '?';
-
   return (
     <div className="max-w-2xl mx-auto space-y-6 pb-16">
       <div className="mb-2">
@@ -176,12 +175,14 @@ export function SettingsPage() {
         <div className="px-6 pb-6 -mt-10">
           {/* Avatar */}
           <div className="relative mb-4 w-fit">
-            <div className="h-20 w-20 rounded-2xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white font-black text-3xl shadow-xl shadow-primary-500/30 border-4 border-background">
-              {avatarLetter}
-            </div>
+            <SafeAvatar
+              src={profile?.avatar_url}
+              className="h-20 w-20 rounded-2xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center border-4 border-background shadow-xl shadow-primary-500/30"
+              iconClassName="h-10 w-10 text-white"
+            />
             <div className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-emerald-500 border-2 border-background" title="Online" />
           </div>
-          <p className="text-xl font-extrabold text-foreground">{profile?.full_name || 'Your Name'}</p>
+          <p className="text-xl font-extrabold text-foreground">{sanitizeName(profile?.full_name) || 'Your Name'}</p>
           <p className="text-sm text-foreground/50">{profile?.email}</p>
           <div className="flex items-center gap-2 mt-2">
             {user?.email_confirmed_at ? (

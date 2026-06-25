@@ -300,3 +300,82 @@ export async function sendFamilyInviteEmail(email: string, inviterName: string, 
     throw error;
   }
 }
+
+export async function sendFamilyMonthlyReportEmail(
+  email: string,
+  familyName: string,
+  month: string,
+  summary: {
+    totalSpent: number;
+    highestSpender: string;
+    topCategory: string;
+    budgetUtilization: number;
+    momChange: number;
+    budgetLimit: number;
+  }
+) {
+  const momText = summary.momChange > 0 
+    ? `<span style="color: #ef4444; font-weight: bold;">+${summary.momChange.toFixed(1)}%</span> increase`
+    : summary.momChange < 0
+    ? `<span style="color: #10b981; font-weight: bold;">${summary.momChange.toFixed(1)}%</span> decrease`
+    : 'No change';
+
+  const html = getEmailLayout(
+    `Family Monthly Report - ${familyName}`,
+    `
+      <h2 style="margin-top: 0; font-size: 20px; font-weight: 700;">Family Monthly Summary - ${familyName}</h2>
+      <p>Here is the shared financial overview for the month of <span class="accent">${month}</span>:</p>
+      
+      <div style="background-color: #f8fafc; border-radius: 12px; padding: 24px; margin: 20px 0; border: 1px solid #e2e8f0;">
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0; font-weight: 600; color: #64748b;">Total Family Spent</td>
+            <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0; text-align: right; color: #1e293b; font-weight: 700; font-size: 18px;">₹${summary.totalSpent.toLocaleString('en-IN')}</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0; font-weight: 600; color: #64748b;">Budget Limit</td>
+            <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0; text-align: right; color: #1e293b; font-weight: 600;">
+              ${summary.budgetLimit > 0 ? `₹${summary.budgetLimit.toLocaleString('en-IN')}` : 'No Budget Set'}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0; font-weight: 600; color: #64748b;">Budget Utilization</td>
+            <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0; text-align: right; color: ${summary.budgetUtilization > 100 ? '#ef4444' : summary.budgetUtilization > 85 ? '#f59e0b' : '#10b981'}; font-weight: 700;">
+              ${summary.budgetLimit > 0 ? `${summary.budgetUtilization.toFixed(1)}%` : 'N/A'}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0; font-weight: 600; color: #64748b;">Highest Spender</td>
+            <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0; text-align: right; color: #4f46e5; font-weight: 600;">${summary.highestSpender}</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0; font-weight: 600; color: #64748b;">Top Spending Category</td>
+            <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0; text-align: right; color: #1e293b; font-weight: 600;">${summary.topCategory}</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 0; font-weight: 600; color: #64748b;">Month-over-Month Trend</td>
+            <td style="padding: 10px 0; text-align: right; color: #1e293b;">${momText}</td>
+          </tr>
+        </table>
+      </div>
+      
+      <div style="text-align: center;">
+        <a href="${appUrl}/family/dashboard" class="button">View Family Dashboard</a>
+      </div>
+    `
+  );
+
+  console.log(`[Email Service] Sending family monthly report email to ${email}...`);
+  try {
+    return await resend.emails.send({
+      from: FROM_EMAIL,
+      to: email,
+      subject: `Family Expense Report for ${month} (${familyName})`,
+      html,
+    });
+  } catch (error) {
+    console.error('[Email Service] Failed to send family monthly report email:', error);
+    throw error;
+  }
+}
+

@@ -191,6 +191,7 @@ export function useExpenses(
         .from('expenses')
         .select('*, category:categories(*), profile:profiles!user_id(*)', { count: 'exact' })
         .eq('workspace_id', workspaceId)
+        .eq('expense_scope', filters?.expense_scope || 'personal')
         .eq('is_deleted', false);
 
       if (filters?.category_id) query = query.eq('category_id', filters.category_id);
@@ -233,6 +234,8 @@ async function createNotification({
   message,
   entityType = null,
   entityId = null,
+  scope = 'personal',
+  familyId = null,
 }: {
   workspaceId?: string | null;
   actorId: string;
@@ -241,10 +244,21 @@ async function createNotification({
   message: string;
   entityType?: string | null;
   entityId?: string | null;
+  scope?: 'personal' | 'family';
+  familyId?: string | null;
 }) {
   try {
     let memberIds: string[] = [actorId];
-    if (workspaceId) {
+    if (scope === 'family' && familyId) {
+      const { data: members, error } = await supabase
+        .from('family_members')
+        .select('profile_id')
+        .eq('family_id', familyId);
+
+      if (!error && members && members.length > 0) {
+        memberIds = members.map((m) => m.profile_id);
+      }
+    } else if (workspaceId) {
       const { data: members, error } = await supabase
         .from('workspace_members')
         .select('profile_id')
@@ -264,6 +278,8 @@ async function createNotification({
       entity_type: entityType,
       entity_id: entityId,
       is_read: false,
+      scope,
+      family_id: familyId,
     }));
 
     const { error: insertError } = await supabase
@@ -295,7 +311,7 @@ export function useCreateExpense() {
       }
 
       // Add Safe Guards
-      if (!workspace?.id) {
+      if (expense.expense_scope !== 'family' && !workspace?.id) {
         throw new Error("Workspace missing");
       }
 
@@ -310,7 +326,7 @@ export function useCreateExpense() {
       const payload = {
         ...expense,
         user_id: user.id,
-        workspace_id: workspace.id,
+        workspace_id: expense.expense_scope === 'family' ? null : (expense.workspace_id || workspace!.id),
       };
 
       // Create Diagnostic Mode
@@ -390,7 +406,7 @@ export function useUpdateExpense() {
       }
 
       // Add Safe Guards
-      if (!workspace?.id) {
+      if (updates.expense_scope !== 'family' && !workspace?.id) {
         throw new Error("Workspace missing");
       }
 
@@ -405,7 +421,7 @@ export function useUpdateExpense() {
       const payload = {
         ...updates,
         user_id: user.id,
-        workspace_id: workspace.id,
+        workspace_id: updates.expense_scope === 'family' ? null : (updates.workspace_id || workspace!.id),
       };
 
       // Create Diagnostic Mode
@@ -470,7 +486,7 @@ export function useUpdateExpense() {
 export function useDeleteExpense() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, workspaceId }: { id: string; workspaceId: string }) => {
+    mutationFn: async ({ id, workspaceId }: { id: string; workspaceId: string | null }) => {
       const { useAuthStore } = await import('@/stores/authStore');
       const { user } = useAuthStore.getState();
       const actorId = user?.id || '';
@@ -530,7 +546,7 @@ export function useTrashedExpenses(workspaceId: string | undefined) {
 export function useRestoreExpense() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, workspaceId }: { id: string; workspaceId: string }) => {
+    mutationFn: async ({ id, workspaceId }: { id: string; workspaceId: string | null }) => {
       const { useAuthStore } = await import('@/stores/authStore');
       const { user } = useAuthStore.getState();
       const actorId = user?.id || '';
@@ -574,7 +590,7 @@ export function useRestoreExpense() {
 export function usePermanentDeleteExpense() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, workspaceId }: { id: string; workspaceId: string }) => {
+    mutationFn: async ({ id, workspaceId }: { id: string; workspaceId: string | null }) => {
       const { useAuthStore } = await import('@/stores/authStore');
       const { user } = useAuthStore.getState();
       const actorId = user?.id || '';
@@ -697,6 +713,7 @@ export function useCheckDuplicateExpense(workspaceId: string | undefined) {
         .from('expenses')
         .select('*, category:categories(*)')
         .eq('workspace_id', workspaceId)
+        .eq('expense_scope', 'personal')
         .eq('is_deleted', false)
         .eq('amount', amount)
         .eq('expense_date', expense_date)
@@ -726,6 +743,7 @@ export function useImportExpenses() {
           user_id: userId,
           import_source: 'csv' as const,
           import_batch_id: batchId,
+          expense_scope: 'personal' as const,
         }));
         const { error } = await supabase.from('expenses').insert(batch);
         if (error) {
@@ -774,6 +792,7 @@ export function useMonthlySummary(
         .from('expenses')
         .select('*, category:categories(*)')
         .eq('workspace_id', workspaceId)
+        .eq('expense_scope', 'personal')
         .eq('is_deleted', false)
         .gte('expense_date', dateFrom)
         .lte('expense_date', dateTo);
@@ -843,12 +862,13 @@ export function useCreateFamily() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (family: Partial<Family>) => {
-      const { data, error } = await supabase
-        .from('families')
-        .insert(family)
-        .select()
-        .single();
-      if (error) throw error;
+      const { familiesApi } = await import('@/api/families');
+      const response = await familiesApi.createFamily({
+        name: family.name || '',
+        monthly_budget: family.monthly_budget,
+        currency_code: family.currency_code,
+      });
+      const data = response.data;
 
       if (data && family.owner_id) {
         await createNotification({
@@ -860,12 +880,75 @@ export function useCreateFamily() {
           entityType: 'family',
           entityId: data.id,
         });
+
+        // Insert overall budget directly into the budgets table
+        if (family.monthly_budget) {
+          const { error: budgetError } = await supabase
+            .from('budgets')
+            .insert({
+              amount: family.monthly_budget,
+              category_id: null,
+              budget_type: 'monthly',
+              workspace_id: null,
+              family_id: data.id,
+              scope: 'family',
+              created_by: family.owner_id,
+              name: 'Overall Family Budget',
+              notes: 'Configured during family creation',
+              alerts: true
+            });
+          if (budgetError) {
+            console.error("Error creating initial family overall budget:", budgetError);
+          }
+        }
       }
 
       return data;
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['families', variables.owner_id] });
+      queryClient.invalidateQueries({ queryKey: ['family-budgets'] });
+      queryClient.invalidateQueries({ queryKey: ['budgets'] });
+    },
+  });
+}
+
+export function useUpdateFamily() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, updates }: { id: string; updates: Partial<Family> }) => {
+      const { data, error } = await supabase
+        .from('families')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['families'] });
+      queryClient.invalidateQueries({ queryKey: ['family-budgets'] });
+      queryClient.invalidateQueries({ queryKey: ['budgets'] });
+    },
+  });
+}
+
+export function useDeleteFamily() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('families')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      return id;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['families'] });
+      queryClient.invalidateQueries({ queryKey: ['family-members'] });
+      queryClient.invalidateQueries({ queryKey: ['family-invites'] });
     },
   });
 }
@@ -885,6 +968,191 @@ export function useFamilyMembers(familyId: string | undefined) {
     enabled: !!familyId,
   });
 }
+
+export function useFamilyInvites(familyId: string | undefined) {
+  return useQuery({
+    queryKey: ['family-invites', familyId],
+    queryFn: async () => {
+      if (!familyId) return [];
+      const { data, error } = await supabase
+        .from('family_invites')
+        .select('*')
+        .eq('family_id', familyId)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data as any[];
+    },
+    enabled: !!familyId,
+  });
+}
+
+export function useAcceptInvite() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (token: string) => {
+      const { familiesApi } = await import('@/api/families');
+      const response = await familiesApi.acceptInvite(token);
+      return response;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['families'] });
+      queryClient.invalidateQueries({ queryKey: ['family-members'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    },
+  });
+}
+
+export function useDeclineInvite() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (token: string) => {
+      const { familiesApi } = await import('@/api/families');
+      const response = await familiesApi.declineInvite(token);
+      return response;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    },
+  });
+}
+
+export function useLeaveFamily() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (familyId: string) => {
+      const { familiesApi } = await import('@/api/families');
+      const response = await familiesApi.leaveFamily(familyId);
+      return response;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['families'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    },
+  });
+}
+
+export function useRemoveFamilyMember(familyId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (memberId: string) => {
+      const { familiesApi } = await import('@/api/families');
+      const response = await familiesApi.removeMember(familyId, memberId);
+      return response;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['family-members', familyId] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    },
+  });
+}
+
+export function useTransferOwnership(familyId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (newOwnerId: string) => {
+      const { data, error } = await supabase.rpc('transfer_family_ownership', {
+        p_family_id: familyId,
+        p_new_owner_id: newOwnerId,
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['families', familyId] });
+      queryClient.invalidateQueries({ queryKey: ['family-members', familyId] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    },
+  });
+}
+
+export function useFamilyBudgets(familyId: string | undefined) {
+  return useQuery({
+    queryKey: ['family-budgets', familyId],
+    queryFn: async () => {
+      if (!familyId) return [];
+      const { data, error } = await supabase
+        .from('budgets')
+        .select('*, category:categories(*)')
+        .eq('family_id', familyId);
+      if (error) throw error;
+      return data as Budget[];
+    },
+    enabled: !!familyId,
+  });
+}
+
+export function useFamilyActivityLogs(familyId: string | undefined) {
+  return useQuery({
+    queryKey: ['family-activity-logs', familyId],
+    queryFn: async () => {
+      if (!familyId) return [];
+      const { data, error } = await supabase
+        .from('family_activity_logs')
+        .select('*, actor:profiles(*)')
+        .eq('family_id', familyId)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data as any[];
+    },
+    enabled: !!familyId,
+  });
+}
+
+export function useFamilyExpenses(
+  familyId: string | undefined,
+  filters?: {
+    category_id?: string;
+    date_from?: string;
+    date_to?: string;
+    payment_method?: string;
+    amount_min?: number;
+    amount_max?: number;
+    search?: string;
+    sort_field?: string;
+    sort_dir?: 'asc' | 'desc';
+  },
+  page: number = 1,
+  pageSize: number = 20
+) {
+  return useQuery({
+    queryKey: ['family-expenses', familyId, filters, page, pageSize],
+    queryFn: async () => {
+      if (!familyId) return { data: [], count: 0 };
+
+      let query = supabase
+        .from('expenses')
+        .select('*, category:categories(*), profile:profiles!user_id(*)', { count: 'exact' })
+        .eq('family_id', familyId)
+        .eq('expense_scope', 'family')
+        .eq('is_deleted', false);
+
+      if (filters?.category_id) query = query.eq('category_id', filters.category_id);
+      if (filters?.date_from)   query = query.gte('expense_date', filters.date_from);
+      if (filters?.date_to)     query = query.lte('expense_date', filters.date_to);
+      if (filters?.payment_method) query = query.eq('payment_method', filters.payment_method);
+      if (filters?.amount_min != null) query = query.gte('amount', filters.amount_min);
+      if (filters?.amount_max != null) query = query.lte('amount', filters.amount_max);
+      if (filters?.search) {
+        query = query.or(`title.ilike.%${filters.search}%,notes.ilike.%${filters.search}%`);
+      }
+
+      const sortField = filters?.sort_field || 'expense_date';
+      const sortDir   = filters?.sort_dir   || 'desc';
+      const from = (page - 1) * pageSize;
+      const to   = from + pageSize - 1;
+
+      query = query.order(sortField, { ascending: sortDir === 'asc' }).range(from, to);
+
+      const { data, error, count } = await query;
+      if (error) throw error;
+      return { data: data as Expense[], count: count || 0 };
+    },
+    enabled: !!familyId,
+    staleTime: 0,
+  });
+}
+
+
 
 export function useWorkspaceMembers(workspaceId: string | undefined) {
   return useQuery({
@@ -910,7 +1178,8 @@ export function useBudgets(workspaceId: string | undefined) {
       const { data, error } = await supabase
         .from('budgets')
         .select('*, category:categories(*)')
-        .eq('workspace_id', workspaceId);
+        .eq('workspace_id', workspaceId)
+        .eq('scope', 'personal');
       if (error) throw error;
       return data as Budget[];
     },
@@ -955,6 +1224,7 @@ export function useCreateBudget() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['budgets'] });
+      queryClient.invalidateQueries({ queryKey: ['family-budgets'] });
       queryClient.invalidateQueries({ queryKey: ['monthly-summary'] });
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
@@ -994,6 +1264,7 @@ export function useUpdateBudget() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['budgets'] });
+      queryClient.invalidateQueries({ queryKey: ['family-budgets'] });
       queryClient.invalidateQueries({ queryKey: ['monthly-summary'] });
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
@@ -1029,6 +1300,7 @@ export function useDeleteBudget() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['budgets'] });
+      queryClient.invalidateQueries({ queryKey: ['family-budgets'] });
       queryClient.invalidateQueries({ queryKey: ['monthly-summary'] });
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
@@ -1036,17 +1308,25 @@ export function useDeleteBudget() {
   });
 }
 
-export function useNotifications(userId: string | undefined) {
+export function useNotifications(userId: string | undefined, scope: 'personal' | 'family' = 'personal') {
   return useQuery({
-    queryKey: ['notifications', userId],
+    queryKey: ['notifications', userId, scope],
     queryFn: async () => {
       if (!userId) return [];
-      const { data, error } = await supabase
+      let query = supabase
         .from('notifications')
         .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(50);
+
+      if (scope === 'personal') {
+        query = query.or('scope.eq.personal,type.eq.family_invite');
+      } else {
+        query = query.eq('scope', 'family');
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       return data as Notification[];
     },
@@ -1115,6 +1395,72 @@ export function useBulkDeleteNotifications() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['notifications', variables.userId] });
+    },
+  });
+}
+
+export function useFamilyTrashedExpenses(familyId: string | undefined) {
+  return useQuery({
+    queryKey: ['family-trash', familyId],
+    queryFn: async () => {
+      if (!familyId) return [];
+      const { data, error } = await supabase
+        .from('family_deleted_expenses')
+        .select('*, category:categories(*)')
+        .eq('family_id', familyId)
+        .order('deleted_at', { ascending: false });
+      if (error) throw error;
+      return data as any[];
+    },
+    enabled: !!familyId,
+  });
+}
+
+export function useRestoreFamilyExpense() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, familyId }: { id: string; familyId: string }) => {
+      const { error } = await supabase.rpc('restore_family_expense', {
+        p_expense_id: id
+      });
+      if (error) throw error;
+      return { id, familyId };
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['family-expenses', variables.familyId] });
+      queryClient.invalidateQueries({ queryKey: ['family-trash', variables.familyId] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    },
+  });
+}
+
+export function usePermanentDeleteFamilyExpense() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, familyId }: { id: string; familyId: string }) => {
+      const { error } = await supabase.rpc('permanent_delete_family_expense', {
+        p_expense_id: id
+      });
+      if (error) throw error;
+      return { id, familyId };
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['family-trash', variables.familyId] });
+    },
+  });
+}
+
+export function useJoinFamilyByCode() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (inviteCode: string) => {
+      const { familiesApi } = await import('@/api/families');
+      const response = await familiesApi.joinFamilyByCode({ inviteCode });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['families'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
     },
   });
 }

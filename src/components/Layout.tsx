@@ -1,25 +1,15 @@
 import React from 'react';
 import { NavLink, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { cn } from '@/lib/utils';
+import { cn, sanitizeName } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
 import { useUIStore } from '@/stores/uiStore';
-import { useNotifications } from '@/hooks/useQueries';
+import { useNotifications, useFamilies } from '@/hooks/useQueries';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import { LayoutDashboard, Receipt, FolderOpen, Target, ChartPie as PieChart, Settings, Users, LogOut, Menu, X, Bell, Search, Sun, Moon, Trash2 } from 'lucide-react';
+import { LayoutDashboard, Receipt, FolderOpen, Target, ChartPie as PieChart, Settings, Users, LogOut, Menu, X, Bell, Search, Sun, Moon, Trash2, Activity } from 'lucide-react';
 import { IconButton } from './Button';
-
-const navItems = [
-  { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { path: '/expenses', icon: Receipt, label: 'Expenses' },
-  { path: '/categories', icon: FolderOpen, label: 'Categories' },
-  { path: '/budgets', icon: Target, label: 'Budgets' },
-  { path: '/reports', icon: PieChart, label: 'Reports' },
-  { path: '/notifications', icon: Bell, label: 'Notifications' },
-  { path: '/family', icon: Users, label: 'Family' },
-  { path: '/trash', icon: Trash2, label: 'Trash' },
-];
+import { SafeAvatar } from './Avatar';
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, profile, workspace, signOut } = useAuthStore();
@@ -28,10 +18,67 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
 
   const { data: notifications } = useNotifications(user?.id);
+  const { data: families } = useFamilies(user?.id);
+  
+  const activeFamily = families?.[0];
   const unreadCount = notifications?.filter((n) => !n.is_read).length || 0;
   const queryClient = useQueryClient();
 
   const workspaceId = workspace?.id;
+
+  interface MenuItem {
+    path: string;
+    icon: React.ComponentType<any>;
+    label: string;
+    badge?: number;
+  }
+
+  interface MenuGroup {
+    title: string;
+    items: MenuItem[];
+  }
+
+  const menuGroups: MenuGroup[] = [
+    {
+      title: 'Personal',
+      items: [
+        { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+        { path: '/expenses', icon: Receipt, label: 'Expenses' },
+        { path: '/categories', icon: FolderOpen, label: 'Categories' },
+        { path: '/budgets', icon: Target, label: 'Budgets' },
+        { path: '/reports', icon: PieChart, label: 'Reports' },
+        { path: '/trash', icon: Trash2, label: 'Trash' },
+      ]
+    },
+    ...(activeFamily ? [
+      {
+        title: 'Family Hub',
+        items: [
+          { path: '/family/dashboard', icon: LayoutDashboard, label: 'Family Dashboard' },
+          { path: '/family/members', icon: Users, label: 'Family Members' },
+          { path: '/family/invites', icon: Bell, label: 'Family Invites' },
+          { path: '/family/expenses', icon: Receipt, label: 'Family Expenses' },
+          { path: '/family/budgets', icon: Target, label: 'Family Budgets' },
+          { path: '/family/reports', icon: PieChart, label: 'Family Reports' },
+          { path: '/family/activity', icon: Activity, label: 'Family Activity' },
+          { path: '/family/settings', icon: Settings, label: 'Family Settings' }
+        ]
+      }
+    ] : [
+      {
+        title: 'Family',
+        items: [
+          { path: '/family', icon: Users, label: 'Family Setup' }
+        ]
+      }
+    ]),
+    {
+      title: 'System',
+      items: [
+        { path: '/notifications', icon: Bell, label: 'Notifications', badge: unreadCount }
+      ]
+    }
+  ];
 
   React.useEffect(() => {
     if (!user?.id) return;
@@ -83,7 +130,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   }, [workspaceId, queryClient]);
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col lg:flex-row relative">
+    <div className="h-screen bg-background text-foreground flex flex-col lg:flex-row relative overflow-hidden">
       {/* Premium Animated Background Blobs */}
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
         <div className="absolute -top-48 -left-48 h-[700px] w-[700px] rounded-full bg-gradient-to-br from-primary-500/10 to-primary-700/5 blur-3xl blob-animate-1" />
@@ -96,7 +143,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <motion.aside
         animate={{ width: sidebarOpen ? 256 : 80 }}
         transition={{ duration: 0.3, ease: 'easeInOut' }}
-        className="fixed left-0 top-0 h-screen bg-card/50 backdrop-blur-xl border-r border-foreground/10 transition-all z-30 hidden lg:flex flex-col select-none"
+        className="h-screen bg-card/50 backdrop-blur-xl border-r border-foreground/10 flex-shrink-0 z-30 hidden lg:flex flex-col select-none overflow-y-auto overflow-x-hidden sticky top-0 overscroll-contain"
+        data-lenis-prevent
       >
         {/* Logo Section */}
         <div className="h-16 flex items-center justify-between px-4 border-b border-foreground/5 flex-shrink-0">
@@ -138,55 +186,64 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Navigation Items */}
-        <nav className="p-4 space-y-2 flex-1 overflow-y-auto scrollbar-thin">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              className="relative flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium transition-colors duration-300 group outline-none"
-            >
-              {({ isActive }: { isActive: boolean }) => (
-                <>
-                  {/* Sliding capsule indicator */}
-                  {isActive && (
-                    <motion.div
-                      layoutId="activeTab"
-                      transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                      className="absolute inset-0 bg-gradient-to-r from-primary-500/15 to-primary-600/10 border border-primary-500/25 rounded-xl z-0 shadow-[0_0_20px_rgba(99,102,241,0.12)]"
-                    />
-                  )}
-                  <div className="relative z-10 flex items-center justify-center">
-                    <item.icon className={cn(
-                      "h-5 w-5 flex-shrink-0 transition-all duration-300",
-                      isActive ? "text-white" : "text-foreground/50 group-hover:text-foreground"
-                    )} />
-                    {item.path === '/notifications' && unreadCount > 0 && !sidebarOpen && (
-                      <span className="absolute -top-1 -right-1 h-2.5 w-2.5 bg-gradient-to-r from-rose-500 to-red-600 rounded-full border border-card" />
-                    )}
-                  </div>
-                  <AnimatePresence>
-                    {sidebarOpen && (
-                      <motion.span
-                        initial={{ opacity: 0, x: -5 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -5 }}
-                        className={cn(
-                          "z-10 transition-colors duration-300 text-sm flex-1 flex items-center justify-between",
-                          isActive ? "text-primary-600 dark:text-white font-semibold" : "text-foreground/60 group-hover:text-foreground"
-                        )}
-                      >
-                        <span>{item.label}</span>
-                        {item.path === '/notifications' && unreadCount > 0 && (
-                          <span className="ml-2 bg-gradient-to-r from-rose-500 to-red-600 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full shadow-sm">
-                            {unreadCount}
-                          </span>
-                        )}
-                      </motion.span>
-                    )}
-                  </AnimatePresence>
-                </>
+        <nav className="p-4 space-y-6 flex-1 scrollbar-thin">
+          {menuGroups.map((group) => (
+            <div key={group.title} className="space-y-1.5">
+              {sidebarOpen && (
+                <div className="px-3 text-[10px] font-bold text-foreground/40 uppercase tracking-widest">
+                  {group.title}
+                </div>
               )}
-            </NavLink>
+              {group.items.map((item) => (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  className="relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors duration-300 group outline-none"
+                >
+                  {({ isActive }: { isActive: boolean }) => (
+                    <>
+                      {/* Sliding capsule indicator */}
+                      {isActive && (
+                        <motion.div
+                          layoutId="activeTab"
+                          transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                          className="absolute inset-0 bg-gradient-to-r from-primary-500/15 to-primary-600/10 border border-primary-500/25 rounded-xl z-0 shadow-[0_0_20px_rgba(99,102,241,0.12)]"
+                        />
+                      )}
+                      <div className="relative z-10 flex items-center justify-center">
+                        <item.icon className={cn(
+                          "h-5 w-5 flex-shrink-0 transition-all duration-300",
+                          isActive ? "text-primary-600 dark:text-white" : "text-foreground/50 group-hover:text-foreground"
+                        )} />
+                        {item.badge !== undefined && item.badge > 0 && !sidebarOpen && (
+                          <span className="absolute -top-1 -right-1 h-2.5 w-2.5 bg-gradient-to-r from-rose-500 to-red-600 rounded-full border border-card" />
+                        )}
+                      </div>
+                      <AnimatePresence>
+                        {sidebarOpen && (
+                          <motion.span
+                            initial={{ opacity: 0, x: -5 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: -5 }}
+                            className={cn(
+                              "z-10 transition-colors duration-300 text-sm flex-1 flex items-center justify-between",
+                              isActive ? "text-primary-600 dark:text-white font-semibold" : "text-foreground/60 group-hover:text-foreground"
+                            )}
+                          >
+                            <span>{item.label}</span>
+                            {item.badge !== undefined && item.badge > 0 && (
+                              <span className="ml-2 bg-gradient-to-r from-rose-500 to-red-600 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full shadow-sm">
+                                {item.badge}
+                              </span>
+                            )}
+                          </motion.span>
+                        )}
+                      </AnimatePresence>
+                    </>
+                  )}
+                </NavLink>
+              ))}
+            </div>
           ))}
         </nav>
 
@@ -256,9 +313,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </IconButton>
           </Link>
           <Link to="/settings" className="h-8 w-8 block rounded-xl bg-gradient-to-tr from-primary-500 to-secondary-500 p-[1.5px] shadow-[0_0_10px_rgba(99,102,241,0.2)] hover:shadow-[0_0_15px_rgba(99,102,241,0.3)] transition-all duration-300 cursor-pointer">
-            <div className="h-full w-full rounded-[9px] bg-card flex items-center justify-center text-foreground font-extrabold text-xs border border-foreground/10">
-              {profile?.full_name?.charAt(0).toUpperCase() || profile?.email?.charAt(0).toUpperCase()}
-            </div>
+            <SafeAvatar
+              src={profile?.avatar_url}
+              className="h-full w-full rounded-[9px]"
+              iconClassName="h-3.5 w-3.5"
+            />
           </Link>
         </div>
       </header>
@@ -280,6 +339,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               exit={{ x: '-100%' }}
               transition={{ type: 'tween', duration: 0.3 }}
               className="lg:hidden fixed left-0 top-0 h-screen w-72 bg-card/95 backdrop-blur-2xl border-r border-foreground/10 z-50 flex flex-col select-none"
+              data-lenis-prevent
             >
               <div className="h-16 flex items-center justify-between px-5 border-b border-foreground/5">
                 <span className="text-lg font-bold bg-gradient-to-r from-primary-400 to-secondary-500 bg-clip-text text-transparent">
@@ -293,24 +353,38 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   <X className="h-5 w-5" />
                 </IconButton>
               </div>
-              <nav className="p-4 space-y-2 flex-grow overflow-y-auto">
-                {navItems.map((item) => (
-                  <NavLink
-                    key={item.path}
-                    to={item.path}
-                    onClick={() => setMobileMenuOpen(false)}
-                    className={({ isActive }: { isActive: boolean }) =>
-                      cn(
-                        'flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-300',
-                        isActive
-                          ? 'bg-primary-500/10 border border-primary-500/20 text-primary-600 dark:text-white shadow-[0_0_15px_rgba(99,102,241,0.1)]'
-                          : 'text-foreground/60 hover:bg-foreground/5 hover:text-foreground'
-                      )
-                    }
-                  >
-                    <item.icon className="h-5 w-5 flex-shrink-0" />
-                    <span>{item.label}</span>
-                  </NavLink>
+              <nav className="p-4 space-y-6 flex-grow overflow-y-auto">
+                {menuGroups.map((group) => (
+                  <div key={group.title} className="space-y-1.5">
+                    <div className="px-4 text-[10px] font-bold text-foreground/40 uppercase tracking-widest">
+                      {group.title}
+                    </div>
+                    {group.items.map((item) => (
+                      <NavLink
+                        key={item.path}
+                        to={item.path}
+                        onClick={() => setMobileMenuOpen(false)}
+                        className={({ isActive }: { isActive: boolean }) =>
+                          cn(
+                            'flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-300',
+                            isActive
+                              ? 'bg-primary-500/10 border border-primary-500/20 text-primary-600 dark:text-white shadow-[0_0_15px_rgba(99,102,241,0.1)]'
+                              : 'text-foreground/60 hover:bg-foreground/5 hover:text-foreground'
+                          )
+                        }
+                      >
+                        <item.icon className="h-5 w-5 flex-shrink-0" />
+                        <span className="flex-1 flex items-center justify-between">
+                          <span>{item.label}</span>
+                          {item.badge !== undefined && item.badge > 0 && (
+                            <span className="bg-gradient-to-r from-rose-500 to-red-600 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full shadow-sm">
+                              {item.badge}
+                            </span>
+                          )}
+                        </span>
+                      </NavLink>
+                    ))}
+                  </div>
                 ))}
               </nav>
               <div className="p-4 border-t border-foreground/5 bg-foreground/[0.01]">
@@ -348,10 +422,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
       {/* Main Content Pane */}
       <main
         className={cn(
-          'transition-all duration-300 flex-1 relative z-10 min-h-screen flex flex-col',
-          sidebarOpen ? 'lg:pl-64' : 'lg:pl-20',
+          'transition-all duration-300 flex-1 relative z-10 h-screen flex flex-col overflow-y-auto overflow-x-hidden overscroll-contain',
           'pt-16 lg:pt-0'
         )}
+        data-lenis-prevent
       >
         {/* Top Header Bar */}
         <header className="sticky top-0 z-20 h-16 bg-card/75 dark:bg-background/45 backdrop-blur-xl border-b border-foreground/10 dark:border-white/5 select-none">
@@ -391,16 +465,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <div className="flex items-center gap-3">
                 <div className="hidden sm:flex flex-col items-end">
                   <span className="font-semibold text-sm text-foreground">
-                    {profile?.full_name || profile?.email?.split('@')[0]}
+                    {sanitizeName(profile?.full_name) || profile?.email?.split('@')[0]}
                   </span>
                   <span className="text-[10px] font-semibold text-foreground/60 tracking-wider uppercase">
-                    Personal Account
+                    {activeFamily ? `${activeFamily.name} Hub` : 'Personal Account'}
                   </span>
                 </div>
                 <Link to="/settings" className="h-9 w-9 block rounded-xl bg-gradient-to-tr from-primary-500 to-secondary-500 p-[1.5px] shadow-[0_0_15px_rgba(99,102,241,0.25)] hover:shadow-[0_0_20px_rgba(99,102,241,0.4)] transition-all duration-300 cursor-pointer">
-                  <div className="h-full w-full rounded-[10px] bg-card flex items-center justify-center text-foreground font-extrabold text-sm border border-foreground/10">
-                    {profile?.full_name?.charAt(0).toUpperCase() || profile?.email?.charAt(0).toUpperCase()}
-                  </div>
+                  <SafeAvatar
+                    src={profile?.avatar_url}
+                    className="h-full w-full rounded-[10px]"
+                    iconClassName="h-4 w-4"
+                  />
                 </Link>
               </div>
             </div>

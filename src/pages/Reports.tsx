@@ -65,7 +65,7 @@ export function ReportsPage() {
   const [selectedYear, setSelectedYear] = React.useState(new Date().getFullYear());
 
   const { data: summary, isLoading: summaryLoading } = useMonthlySummary(workspaceId, selectedYear, selectedMonth);
-  const { data: allExpenses, isLoading: expensesLoading } = useExpenses(workspaceId, {}, 1, 500);
+  const { data: allExpenses, isLoading: expensesLoading } = useExpenses(workspaceId, { expense_scope: 'personal' }, 1, 500);
   const { data: budgets } = useBudgets(workspaceId);
 
   // Prev month summary for trends

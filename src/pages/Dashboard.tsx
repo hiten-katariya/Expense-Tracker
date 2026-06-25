@@ -5,7 +5,7 @@ import { useMonthlySummary, useExpenses, useCategories, useNotifications } from 
 import { TextReveal } from '@/components/ui/cascade-text';
 import { Button } from '@/components/Button';
 import { StatCardSkeleton, ExpenseRowSkeleton } from '@/components/Skeleton';
-import { formatCurrency, formatDate, cn } from '@/lib/utils';
+import { formatCurrency, formatDate, cn, sanitizeName } from '@/lib/utils';
 import { Plus, TrendingUp, TrendingDown, Wallet, Layers, ArrowRight, Sparkles, Activity, Target, Bell, CircleAlert as AlertCircle } from 'lucide-react';
 import {
   Tooltip as RechartsTooltip,
@@ -90,9 +90,10 @@ export function Dashboard() {
   const currentYear = new Date().getFullYear();
 
   const { data: summary, isLoading: summaryLoading } = useMonthlySummary(workspaceId, currentYear, currentMonth);
-  const { data: recentExpenses, isLoading: expensesLoading } = useExpenses(workspaceId, {}, 1, 5);
+  const { data: recentExpenses, isLoading: expensesLoading } = useExpenses(workspaceId, { expense_scope: 'personal' }, 1, 5);
   const { data: categories } = useCategories(workspaceId);
   const { data: allMonthExpenses } = useExpenses(workspaceId, {
+    expense_scope: 'personal',
     date_from: `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`,
     date_to: `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${new Date(currentYear, currentMonth + 1, 0).getDate()}`,
   }, 1, 200);
@@ -148,7 +149,7 @@ export function Dashboard() {
             </span>
           </div>
           <TextReveal
-            text={`Welcome back, ${profile?.full_name?.split(' ')[0] || 'there'} 👋`}
+            text={`Welcome back, ${sanitizeName(profile?.full_name).split(' ')[0] || 'there'}`}
             subtitle="Here's your financial snapshot for this month."
             textSize="text-3xl"
             variant="plain"
@@ -201,8 +202,6 @@ export function Dashboard() {
           subtitle="per day this month"
           icon={<Activity className="h-5 w-5" />}
           gradient="bg-gradient-to-br from-secondary-500 to-secondary-600"
-          trend="up"
-          trendValue="4.2%"
           delay={1}
         />
         <PremiumStatCard
@@ -211,8 +210,6 @@ export function Dashboard() {
           subtitle="estimated end-of-month"
           icon={<TrendingUp className="h-5 w-5" />}
           gradient="bg-gradient-to-br from-accent-pink to-accent-pink-dark"
-          trend="down"
-          trendValue="1.8%"
           delay={2}
         />
         <PremiumStatCard

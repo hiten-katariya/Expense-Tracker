@@ -1,9 +1,19 @@
 import { apiClient } from './client';
-import { ApiResponse, Family, FamilyMember } from '@/types/api';
+import { ApiResponse } from '@/types/api';
+import { Family, FamilyMember } from '@/types';
 
 export const familiesApi = {
-  createFamily: async (data: { name: string }): Promise<ApiResponse<Family>> => {
+  createFamily: async (data: {
+    name: string;
+    monthly_budget?: number | null;
+    currency_code?: string;
+  }): Promise<ApiResponse<Family>> => {
     const response = await apiClient.post('/families', data);
+    return response.data;
+  },
+
+  joinFamilyByCode: async (data: { inviteCode: string }): Promise<ApiResponse<{ familyId: string }>> => {
+    const response = await apiClient.post('/families/join-by-code', data);
     return response.data;
   },
 

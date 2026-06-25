@@ -48,6 +48,7 @@ export function BudgetsPage() {
   const { data: categories } = useCategories(workspaceId);
   const { data: members } = useWorkspaceMembers(workspaceId);
   const { data: expenses } = useExpenses(workspaceId, {
+    expense_scope: 'personal',
     date_from: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
   }, 1, 1000);
 

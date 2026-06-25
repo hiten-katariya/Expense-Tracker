@@ -143,3 +143,12 @@ export function generateDailyHeatmapData(
 
   return data;
 }
+
+export function sanitizeName(name: string | null | undefined): string {
+  if (!name) return '';
+  // Remove Unicode replacement character \uFFFD and trim trailing question marks/whitespace
+  let clean = name.replace(/\uFFFD/g, '');
+  clean = clean.replace(/[?\s]+$/, '').trim();
+  return clean;
+}
+

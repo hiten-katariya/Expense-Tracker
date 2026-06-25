@@ -347,6 +347,8 @@ export function ExpenseFormPage() {
         notes: data.notes || null,
         user_id: profile!.id,
         workspace_id: workspaceId!,
+        expense_scope: 'personal' as const,
+        family_id: null,
       };
       if (isEdit && expenseId) {
         await updateExpense.mutateAsync({ id: expenseId, updates: payload });
@@ -482,3 +484,4 @@ export function ExpenseFormPage() {
     </div>
   );
 }
+  
