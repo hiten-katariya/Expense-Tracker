@@ -73,7 +73,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const { data: notifications } = useNotifications(user?.id);
   const { data: families } = useFamilies(user?.id);
-  
+
   const activeFamily = families?.[0];
   const unreadCount = notifications?.filter((n) => !n.is_read).length || 0;
   const queryClient = useQueryClient();
@@ -209,12 +209,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -10 }}
-                className="flex items-center gap-2.5"
+                className="flex items-center gap-3"
               >
-                <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-[#06B6D4] via-[#8B5CF6] to-[#EC4899] p-[1px] shadow-lg shadow-[#8B5CF6]/20">
-                  <div className="h-full w-full rounded-[7px] bg-bg-card dark:bg-card flex items-center justify-center text-white font-mono font-black text-[10px]">
-                    EX
-                  </div>
+                <div className="h-9 w-9 rounded-xl overflow-hidden shadow-lg shadow-[#8B5CF6]/20 flex items-center justify-center">
+                  <img src="/logo.png" alt="Logo" className="h-full w-full object-cover" />
                 </div>
                 <span className="text-sm font-mono tracking-[0.15em] font-black bg-gradient-to-r from-[#06B6D4] via-[#8B5CF6] to-[#EC4899] bg-clip-text text-transparent select-none">
                   Expenso
@@ -226,11 +224,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.8 }}
-                className="h-7 w-7 rounded-lg bg-gradient-to-br from-[#06B6D4] via-[#8B5CF6] to-[#EC4899] p-[1px] shadow-lg shadow-[#8B5CF6]/20"
+                className="h-9 w-9 rounded-xl overflow-hidden shadow-lg shadow-[#8B5CF6]/20 flex items-center justify-center"
               >
-                <div className="h-full w-full rounded-[7px] bg-bg-card dark:bg-card flex items-center justify-center text-white font-mono font-black text-[10px]">
-                  EX
-                </div>
+                <img src="/logo.png" alt="Logo" className="h-full w-full object-cover" />
               </motion.div>
             )}
           </AnimatePresence>
@@ -347,14 +343,24 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Mobile Header */}
       <header className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-card/85 backdrop-blur-xl border-b border-foreground/10 dark:border-white/5 flex items-center justify-between px-4 z-30 select-none">
-        <IconButton onClick={() => setMobileMenuOpen(true)} className="text-foreground/80">
+        <IconButton
+          onClick={() => setMobileMenuOpen(true)}
+          className="text-foreground/80"
+          aria-expanded={mobileMenuOpen}
+          aria-label="Open navigation menu"
+        >
           <Menu className="h-5 w-5" />
         </IconButton>
-        <span className="text-md font-mono tracking-[0.15em] font-black bg-gradient-to-r from-[#06B6D4] via-[#8B5CF6] to-[#EC4899] bg-clip-text text-transparent">
-          Expenso
-        </span>
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-8 rounded-lg overflow-hidden shadow-lg shadow-[#8B5CF6]/20 flex items-center justify-center">
+            <img src="/logo.png" alt="Logo" className="h-full w-full object-cover" />
+          </div>
+          <span className="text-md font-mono tracking-[0.15em] font-black bg-gradient-to-r from-[#06B6D4] via-[#8B5CF6] to-[#EC4899] bg-clip-text text-transparent">
+            Expenso
+          </span>
+        </div>
         <div className="flex items-center gap-2">
-          <IconButton 
+          <IconButton
             onClick={toggleDarkMode}
             className="text-foreground/60 hover:text-foreground hover:bg-foreground/5 p-2 rounded-xl"
           >
@@ -405,9 +411,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
               data-lenis-prevent
             >
               <div className="h-16 flex items-center justify-between px-5 border-b border-foreground/5">
-                <span className="text-lg font-mono tracking-[0.15em] font-black bg-gradient-to-r from-[#06B6D4] via-[#8B5CF6] to-[#EC4899] bg-clip-text text-transparent">
-                  Expenso
-                </span>
+                <div className="flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-xl overflow-hidden shadow-lg shadow-[#8B5CF6]/20 flex items-center justify-center">
+                    <img src="/logo.png" alt="Logo" className="h-full w-full object-cover" />
+                  </div>
+                  <span className="text-lg font-mono tracking-[0.15em] font-black bg-gradient-to-r from-[#06B6D4] via-[#8B5CF6] to-[#EC4899] bg-clip-text text-transparent">
+                    Expenso
+                  </span>
+                </div>
                 <IconButton
                   onClick={() => setMobileMenuOpen(false)}
                   variant="ghost"
@@ -485,8 +496,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Main Content Pane */}
       <main
+        id="main-content"
+        role="main"
+        tabIndex={-1}
         className={cn(
-          'transition-all duration-300 flex-1 relative z-10 h-screen flex flex-col overflow-y-auto overflow-x-hidden overscroll-contain',
+          'transition-all duration-300 flex-1 relative z-10 h-screen flex flex-col overflow-y-auto overflow-x-hidden overscroll-contain outline-none',
           'pt-16 lg:pt-0'
         )}
         data-lenis-prevent
@@ -504,9 +518,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 />
               </div>
             </div>
-            
+
             <div className="flex items-center gap-4">
-              <IconButton 
+              <IconButton
                 onClick={toggleDarkMode}
                 className="text-foreground/60 hover:text-foreground hover:bg-foreground/5 p-2 rounded-xl"
               >

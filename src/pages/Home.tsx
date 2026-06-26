@@ -381,10 +381,8 @@ export function HomePage() {
       <header className="sticky top-0 z-50 w-full h-20 flex items-center justify-between px-6 sm:px-8 lg:px-12 border-b border-white/5 bg-bg-dark/60 backdrop-blur-xl">
         <div className="mx-auto max-w-[1440px] w-full flex items-center justify-between">
           <div className="flex items-center gap-2 select-none">
-            <div className="h-9 w-9 rounded-xl bg-gradient-to-tr from-[#06B6D4] via-[#8B5CF6] to-[#EC4899] p-[1.5px] shadow-[0_0_15px_rgba(139,92,246,0.35)]">
-              <div className="h-full w-full rounded-[10px] bg-bg-card flex items-center justify-center text-white font-mono font-black text-xs border border-black/10">
-                EX
-              </div>
+            <div className="h-11 w-11 rounded-2xl overflow-hidden shadow-[0_0_15px_rgba(139,92,246,0.35)] flex items-center justify-center">
+              <img src="/logo.png" alt="Logo" className="h-full w-full object-cover" />
             </div>
             <span className="text-lg font-mono tracking-[0.15em] font-black bg-gradient-to-r from-[#06B6D4] via-[#8B5CF6] to-[#EC4899] bg-clip-text text-transparent">
               Expenso
@@ -1713,9 +1711,14 @@ export function HomePage() {
         <div className="mx-auto max-w-[1440px] px-6 sm:px-8 lg:px-12 w-full space-y-12">
           <div className="grid gap-8 sm:grid-cols-2 md:grid-cols-4">
             <div className="space-y-4">
-              <span className="text-base font-mono tracking-[0.15em] font-black bg-gradient-to-r from-[#06B6D4] via-[#8B5CF6] to-[#EC4899] bg-clip-text text-transparent">
-                Expenso
-              </span>
+              <div className="flex items-center gap-3 select-none mb-3">
+                <div className="h-9 w-9 rounded-xl overflow-hidden shadow-[0_0_10px_rgba(139,92,246,0.2)] flex items-center justify-center">
+                  <img src="/logo.png" alt="Logo" className="h-full w-full object-cover" />
+                </div>
+                <span className="text-base font-mono tracking-[0.15em] font-black bg-gradient-to-r from-[#06B6D4] via-[#8B5CF6] to-[#EC4899] bg-clip-text text-transparent">
+                  Expenso
+                </span>
+              </div>
               <p className="text-xs text-slate-500 leading-relaxed max-w-xs">
                 A premium, modern SaaS product styled with dark glassmorphic components for personal and household bookkeeping.
               </p>

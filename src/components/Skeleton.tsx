@@ -4,7 +4,8 @@ import { cn } from '@/lib/utils';
 export function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn('animate-pulse bg-slate-200 rounded', className)}
+      className={cn('animate-pulse bg-slate-200 dark:bg-white/5 rounded', className)}
+      aria-hidden="true"
       {...props}
     />
   );
@@ -12,7 +13,7 @@ export function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLDivEl
 
 export function ExpenseRowSkeleton() {
   return (
-    <div className="flex items-center gap-4 py-3 px-4 border-b border-slate-100">
+    <div className="flex items-center gap-4 py-3 px-4 border-b border-slate-100 dark:border-foreground/10" aria-hidden="true">
       <Skeleton className="h-4 w-24" />
       <div className="flex-1">
         <Skeleton className="h-4 w-32 mb-2" />
@@ -21,13 +22,14 @@ export function ExpenseRowSkeleton() {
       <Skeleton className="h-6 w-16 rounded-full" />
       <Skeleton className="h-4 w-20" />
       <Skeleton className="h-4 w-6" />
+      <span className="sr-only">Loading expense...</span>
     </div>
   );
 }
 
 export function CategoryCardSkeleton() {
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-4">
+    <div className="bg-white dark:bg-card rounded-xl border border-slate-200 dark:border-white/10 p-4" aria-hidden="true">
       <div className="flex items-center gap-3 mb-3">
         <Skeleton className="h-10 w-10 rounded-lg" />
         <div>
@@ -36,23 +38,25 @@ export function CategoryCardSkeleton() {
         </div>
       </div>
       <Skeleton className="h-2 w-full rounded-full" />
+      <span className="sr-only">Loading category...</span>
     </div>
   );
 }
 
 export function StatCardSkeleton() {
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-6">
+    <div className="bg-white dark:bg-card rounded-xl border border-slate-200 dark:border-white/10 p-6" aria-hidden="true">
       <Skeleton className="h-4 w-20 mb-2" />
       <Skeleton className="h-8 w-32 mb-1" />
       <Skeleton className="h-3 w-24" />
+      <span className="sr-only">Loading metric...</span>
     </div>
   );
 }
 
 export function ChartSkeleton({ height = 'h-64' }: { height?: string }) {
   return (
-    <div className={cn('flex items-center justify-center', height)}>
+    <div className={cn('flex items-center justify-center', height)} aria-hidden="true">
       <div className="w-3/4">
         <div className="flex items-end gap-2 h-40">
           {[...Array(7)].map((_, i) => (
@@ -60,13 +64,14 @@ export function ChartSkeleton({ height = 'h-64' }: { height?: string }) {
           ))}
         </div>
       </div>
+      <span className="sr-only">Loading chart data...</span>
     </div>
   );
 }
 
 export function FamilyMemberSkeleton() {
   return (
-    <div className="bg-white/60 dark:bg-white/[0.03] rounded-2xl border border-foreground/10 p-5 flex items-center justify-between">
+    <div className="bg-white/60 dark:bg-white/[0.03] rounded-2xl border border-foreground/10 p-5 flex items-center justify-between" aria-hidden="true">
       <div className="flex items-center gap-3">
         <Skeleton className="h-10 w-10 rounded-xl" />
         <div>
@@ -75,13 +80,14 @@ export function FamilyMemberSkeleton() {
         </div>
       </div>
       <Skeleton className="h-6 w-16 rounded-full" />
+      <span className="sr-only">Loading family member...</span>
     </div>
   );
 }
 
 export function NotificationSkeleton() {
   return (
-    <div className="p-4 flex gap-3 border-b border-foreground/5">
+    <div className="p-4 flex gap-3 border-b border-foreground/5" aria-hidden="true">
       <Skeleton className="h-8 w-8 rounded-lg shrink-0" />
       <div className="flex-1 space-y-2">
         <div className="flex items-center justify-between">
@@ -91,13 +97,14 @@ export function NotificationSkeleton() {
         <Skeleton className="h-3 w-full" />
         <Skeleton className="h-2.5 w-16" />
       </div>
+      <span className="sr-only">Loading notification...</span>
     </div>
   );
 }
 
 export function AIChatSkeleton() {
   return (
-    <div className="space-y-4 p-2">
+    <div className="space-y-4 p-2" aria-hidden="true">
       <div className="flex gap-2.5 justify-start">
         <Skeleton className="h-8 w-8 rounded-lg shrink-0" />
         <div className="space-y-1.5 max-w-[70%]">
@@ -116,13 +123,14 @@ export function AIChatSkeleton() {
           <Skeleton className="h-16 w-56 rounded-2xl rounded-tl-none bg-slate-300/40 dark:bg-white/5" />
         </div>
       </div>
+      <span className="sr-only">Loading chat history...</span>
     </div>
   );
 }
 
 export function SettingsFormSkeleton() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" aria-hidden="true">
       <div className="space-y-2">
         <Skeleton className="h-4 w-20" />
         <Skeleton className="h-10 w-full rounded-xl" />
@@ -145,7 +153,7 @@ export function SettingsFormSkeleton() {
         <Skeleton className="h-10 w-24 rounded-xl" />
         <Skeleton className="h-10 w-24 rounded-xl" />
       </div>
+      <span className="sr-only">Loading settings...</span>
     </div>
   );
 }
-

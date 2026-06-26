@@ -17,6 +17,7 @@ export interface Profile {
   preferred_currency?: string;
   email_verified?: boolean;
   profile_completed?: boolean;
+  is_admin?: boolean;
 }
 
 export interface Workspace {

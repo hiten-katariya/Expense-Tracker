@@ -121,7 +121,12 @@ export function LoginPage() {
                 Back to Home
               </Link>
             </div>
-            <div className="text-center">
+            <div className="text-center space-y-2">
+              <div className="flex justify-center mb-2">
+                <div className="h-16 w-16 rounded-2xl bg-gradient-to-tr from-[#06B6D4] via-[#8B5CF6] to-[#EC4899] p-[1.5px] shadow-[0_0_20px_rgba(139,92,246,0.4)] overflow-hidden">
+                  <img src="/logo.png" alt="Logo" className="h-full w-full object-cover rounded-[14px]" />
+                </div>
+              </div>
               <CardTitle className="text-2xl font-extrabold bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent">
                 Welcome Back
               </CardTitle>
@@ -141,23 +146,35 @@ export function LoginPage() {
                 leftIcon={<Mail className="h-4.5 w-4.5 text-slate-500" />}
                 {...register('email')}
               />
-              <Input
-                label="Password"
-                type={showPassword ? 'text' : 'password'}
-                placeholder="••••••••"
-                error={errors.password?.message}
-                leftIcon={<Lock className="h-4.5 w-4.5 text-slate-500" />}
-                rightIcon={
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="text-slate-500 hover:text-slate-300 focus:outline-none transition-colors"
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 tracking-wide">
+                    Password
+                  </label>
+                  <Link
+                    to="/forgot-password"
+                    className="text-xs font-semibold text-primary-400 hover:text-primary-300 transition-colors"
                   >
-                    {showPassword ? <EyeOff className="h-4.5 w-4.5" /> : <Eye className="h-4.5 w-4.5" />}
-                  </button>
-                }
-                {...register('password')}
-              />
+                    Forgot Password?
+                  </Link>
+                </div>
+                <Input
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="••••••••"
+                  error={errors.password?.message}
+                  leftIcon={<Lock className="h-4.5 w-4.5 text-slate-500" />}
+                  rightIcon={
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="text-slate-500 hover:text-slate-300 focus:outline-none transition-colors"
+                    >
+                      {showPassword ? <EyeOff className="h-4.5 w-4.5" /> : <Eye className="h-4.5 w-4.5" />}
+                    </button>
+                  }
+                  {...register('password')}
+                />
+              </div>
               <Button type="submit" className="w-full mt-2" disabled={isLoading}>
                 {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Sign In'}
               </Button>
@@ -347,7 +364,12 @@ export function RegisterPage() {
                 Back to Home
               </Link>
             </div>
-            <div className="text-center">
+            <div className="text-center space-y-2">
+              <div className="flex justify-center mb-2">
+                <div className="h-16 w-16 rounded-2xl bg-gradient-to-tr from-[#06B6D4] via-[#8B5CF6] to-[#EC4899] p-[1.5px] shadow-[0_0_20px_rgba(139,92,246,0.4)] overflow-hidden">
+                  <img src="/logo.png" alt="Logo" className="h-full w-full object-cover rounded-[14px]" />
+                </div>
+              </div>
               <CardTitle className="text-2xl font-extrabold bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent">
                 Create Account
               </CardTitle>

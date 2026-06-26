@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Lenis from 'lenis';
 import { useAuthStore, handleAuthStateChange } from '@/stores/authStore';
@@ -35,6 +35,25 @@ import { CsvImportPage } from '@/pages/CsvImport';
 import OnboardingPage from '@/pages/Onboarding';
 import VerifyEmailPage from '@/pages/VerifyEmail';
 import { NotificationsPage } from '@/pages/Notifications';
+import ForgotPasswordPage from '@/pages/ForgotPassword';
+import ResetPasswordPage from '@/pages/ResetPassword';
+
+// Admin Pages
+import { AdminLayout } from '@/components/AdminLayout';
+import AdminDashboard from '@/pages/admin/AdminDashboard';
+import AdminUsers from '@/pages/admin/AdminUsers';
+import AdminUserDetail from '@/pages/admin/AdminUserDetail';
+import AdminExpenses from '@/pages/admin/AdminExpenses';
+import AdminBudgets from '@/pages/admin/AdminBudgets';
+import AdminFamilies from '@/pages/admin/AdminFamilies';
+import AdminWorkspaces from '@/pages/admin/AdminWorkspaces';
+import AdminAIUsage from '@/pages/admin/AdminAIUsage';
+import AdminOCRUsage from '@/pages/admin/AdminOCRUsage';
+import AdminEmailLogs from '@/pages/admin/AdminEmailLogs';
+import AdminNotifications from '@/pages/admin/AdminNotifications';
+import AdminAuditLogs from '@/pages/admin/AdminAuditLogs';
+import AdminAnalytics from '@/pages/admin/AdminAnalytics';
+import AdminSystemHealth from '@/pages/admin/AdminSystemHealth';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -105,14 +124,82 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// Stealth Admin Route: shows 404 for non-admins, never reveals admin exists
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { user, profile, isInitialized } = useAuthStore();
+
+  if (!isInitialized) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="h-12 w-12 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // Show 404 for non-admins — NEVER show 403 or redirect to login
+  const adminEmail = import.meta.env.VITE_ADMIN_EMAIL;
+  if (!user || !profile?.is_admin || user.email !== adminEmail) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center relative overflow-hidden">
+        <div className="fixed inset-0 grid-bg opacity-[0.04] dark:opacity-[0.07]" />
+        <div className="text-center relative z-10 space-y-4">
+          <p className="text-7xl font-black text-foreground/10">404</p>
+          <p className="text-lg font-semibold text-foreground/60">Page not found</p>
+          <p className="text-sm text-foreground/40">The page you're looking for doesn't exist.</p>
+        </div>
+      </div>
+    );
+  }
+
+  return <AdminLayout>{children}</AdminLayout>;
+}
+
 function AppRoutes() {
-  const { initialize, isInitialized, user } = useAuthStore();
+  const { initialize, isInitialized, user, signOut } = useAuthStore();
+  const addNotification = useUIStore((s) => s.addNotification);
 
   useEffect(() => {
     if (!isInitialized) {
       initialize();
     }
   }, [initialize, isInitialized]);
+
+  // Global Session Idle Timeout (15 minutes of inactivity)
+  useEffect(() => {
+    if (!user) return;
+
+    let timeoutId: number;
+
+    const resetTimer = () => {
+      if (timeoutId) window.clearTimeout(timeoutId);
+      timeoutId = window.setTimeout(handleLogout, 15 * 60 * 1000);
+    };
+
+    const handleLogout = () => {
+      console.log('Session idle timeout expired. Logging out.');
+      signOut();
+      addNotification({
+        type: 'error',
+        title: 'Session Expired',
+        message: 'You have been signed out due to inactivity.',
+      });
+    };
+
+    const events = ['mousemove', 'keydown', 'mousedown', 'scroll', 'click', 'touchstart'];
+    
+    events.forEach((event) => {
+      window.addEventListener(event, resetTimer);
+    });
+
+    resetTimer();
+
+    return () => {
+      if (timeoutId) window.clearTimeout(timeoutId);
+      events.forEach((event) => {
+        window.removeEventListener(event, resetTimer);
+      });
+    };
+  }, [user, signOut, addNotification]);
 
   useEffect(() => {
     const {
@@ -130,8 +217,12 @@ function AppRoutes() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center relative overflow-hidden">
         <div className="absolute inset-0 grid-bg opacity-[0.05] pointer-events-none" />
-        <div className="text-center relative z-10">
-          <div className="h-12 w-12 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4 shadow-[0_0_15px_rgba(99,102,241,0.25)]" />
+        <div className="text-center relative z-10 flex flex-col items-center">
+          <div className="relative h-16 w-16 mb-4 flex items-center justify-center">
+            <div className="absolute inset-0 border-2 border-primary-500/20 rounded-full" />
+            <div className="absolute inset-0 border-2 border-t-primary-500 rounded-full animate-spin" />
+            <img src="/logo.png" alt="Logo" className="h-10 w-10 object-contain rounded-lg shadow-lg" />
+          </div>
           <p className="text-foreground/65 font-semibold tracking-wide flex items-center justify-center gap-1">
             Loading <span className="font-mono tracking-[0.15em] font-black bg-gradient-to-r from-[#06B6D4] via-[#8B5CF6] to-[#EC4899] bg-clip-text text-transparent">Expenso</span>...
           </p>
@@ -147,6 +238,8 @@ function AppRoutes() {
       <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
       <Route path="/register" element={user ? <Navigate to="/dashboard" replace /> : <RegisterPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
+      <Route path="/forgot-password" element={user ? <Navigate to="/dashboard" replace /> : <ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
 
       {/* Onboarding Route */}
       <Route
@@ -401,6 +494,22 @@ function AppRoutes() {
         }
       />
 
+      {/* Stealth Admin Routes — shows 404 for non-admins */}
+      <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+      <Route path="/admin/users" element={<AdminRoute><AdminUsers /></AdminRoute>} />
+      <Route path="/admin/users/:id" element={<AdminRoute><AdminUserDetail /></AdminRoute>} />
+      <Route path="/admin/expenses" element={<AdminRoute><AdminExpenses /></AdminRoute>} />
+      <Route path="/admin/budgets" element={<AdminRoute><AdminBudgets /></AdminRoute>} />
+      <Route path="/admin/families" element={<AdminRoute><AdminFamilies /></AdminRoute>} />
+      <Route path="/admin/workspaces" element={<AdminRoute><AdminWorkspaces /></AdminRoute>} />
+      <Route path="/admin/ai-usage" element={<AdminRoute><AdminAIUsage /></AdminRoute>} />
+      <Route path="/admin/ocr-usage" element={<AdminRoute><AdminOCRUsage /></AdminRoute>} />
+      <Route path="/admin/email-logs" element={<AdminRoute><AdminEmailLogs /></AdminRoute>} />
+      <Route path="/admin/notifications" element={<AdminRoute><AdminNotifications /></AdminRoute>} />
+      <Route path="/admin/audit-logs" element={<AdminRoute><AdminAuditLogs /></AdminRoute>} />
+      <Route path="/admin/analytics" element={<AdminRoute><AdminAnalytics /></AdminRoute>} />
+      <Route path="/admin/system-health" element={<AdminRoute><AdminSystemHealth /></AdminRoute>} />
+
       {/* Default Redirect */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
@@ -431,6 +540,36 @@ function ToastContainer() {
   );
 }
 
+function RouteAnnouncer() {
+  const location = useLocation();
+  const [announcement, setAnnouncement] = React.useState('');
+
+  useEffect(() => {
+    const path = location.pathname;
+    if (path === '/') {
+      setAnnouncement('Navigated to Home page');
+    } else {
+      const pageName = path
+        .split('/')
+        .filter(Boolean)
+        .map(segment => segment.charAt(0).toUpperCase() + segment.slice(1))
+        .join(' ');
+      setAnnouncement(`Navigated to ${pageName} page`);
+    }
+  }, [location]);
+
+  return (
+    <div
+      className="sr-only"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    >
+      {announcement}
+    </div>
+  );
+}
+
 export default function App() {
   useEffect(() => {
     const lenis = new Lenis({
@@ -458,6 +597,8 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
+        <a href="#main-content" className="skip-link">Skip to main content</a>
+        <RouteAnnouncer />
         <AppRoutes />
         <ToastContainer />
         <Toaster position="top-right" richColors closeButton />

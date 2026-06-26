@@ -10,32 +10,31 @@ import { Loader, CheckCircle2, XCircle } from 'lucide-react';
 export default function VerifyEmail() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { user, refreshProfile } = useAuthStore();
+  const { refreshProfile } = useAuthStore();
   const addNotification = useUIStore((s) => s.addNotification);
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [errorMessage, setErrorMessage] = useState<string>('');
 
-  const token = searchParams.get('token');
+  const tokenHash = searchParams.get('token_hash') || searchParams.get('token');
+  const type = searchParams.get('type') || 'signup';
 
   useEffect(() => {
     async function verify() {
-      if (!token) {
+      if (!tokenHash) {
         setStatus('error');
         setErrorMessage('Verification token is missing. Please check your verification email link.');
         return;
       }
 
       try {
-        const response = await fetch('/api/auth/verify-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token }),
+        const { supabase: supabaseClient } = await import('@/lib/supabase');
+        const { error } = await supabaseClient.auth.verifyOtp({
+          token_hash: tokenHash,
+          type: type as any,
         });
 
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.error || 'Failed to verify email');
+        if (error) {
+          throw error;
         }
 
         setStatus('success');
@@ -46,11 +45,12 @@ export default function VerifyEmail() {
         });
 
         // Trigger welcome email via server endpoint (optional / nice to have)
-        if (user && user.email) {
+        const latestUser = useAuthStore.getState().user;
+        if (latestUser && latestUser.email) {
           fetch('/api/test/welcome-email', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: user.email, name: user.user_metadata?.full_name || 'Valued User' }),
+            body: JSON.stringify({ email: latestUser.email, name: latestUser.user_metadata?.full_name || 'Valued User' }),
           }).catch((err) => console.warn('Failed to send welcome email:', err));
         }
 
@@ -58,10 +58,8 @@ export default function VerifyEmail() {
         await refreshProfile();
 
         // Write verification notification to user's notifications center
-        const latestUser = useAuthStore.getState().user;
         const latestWorkspace = useAuthStore.getState().workspace;
         if (latestUser?.id) {
-          const { supabase: supabaseClient } = await import('@/lib/supabase');
           await supabaseClient
             .from('notifications')
             .insert({
@@ -85,7 +83,7 @@ export default function VerifyEmail() {
     }
 
     verify();
-  }, [token, user, refreshProfile, navigate, addNotification]);
+  }, [tokenHash, type, refreshProfile, navigate, addNotification]);
 
   return (
     <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-4 relative overflow-hidden">
@@ -104,6 +102,11 @@ export default function VerifyEmail() {
       >
         <Card className="bg-card/45 backdrop-blur-2xl border-foreground/10 shadow-2xl overflow-hidden text-center py-12 px-6">
           <CardHeader className="pb-2">
+            <div className="flex justify-center mb-3">
+              <div className="h-16 w-16 rounded-2xl bg-gradient-to-tr from-[#06B6D4] via-[#8B5CF6] to-[#EC4899] p-[1.5px] shadow-[0_0_20px_rgba(139,92,246,0.4)] overflow-hidden">
+                <img src="/logo.png" alt="Logo" className="h-full w-full object-cover rounded-[14px]" />
+              </div>
+            </div>
             <div className="flex justify-center mb-4">
               {status === 'loading' && (
                 <div className="relative">

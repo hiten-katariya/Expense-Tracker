@@ -12,6 +12,35 @@ export interface TemplateContent {
 }
 
 /**
+ * Escapes special characters to prevent HTML/Script injection (XSS).
+ */
+export function escapeHtml(str: any): string {
+  if (str === null || str === undefined) return '';
+  const val = String(str);
+  return val
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+/**
+ * Validates and escapes URLs to ensure only http/https protocols or relative routes are allowed, preventing javascript: injection.
+ */
+export function validateAndEscapeUrl(url: string | undefined): string {
+  if (!url) return escapeHtml(APP_URL);
+  const cleanUrl = String(url).trim();
+  if (/^(https?:\/\/)/i.test(cleanUrl)) {
+    return escapeHtml(cleanUrl);
+  }
+  if (cleanUrl.startsWith('/')) {
+    return escapeHtml(`${APP_URL}${cleanUrl}`);
+  }
+  return escapeHtml(APP_URL);
+}
+
+/**
  * Returns rendering of an HTML email template with matching layout
  */
 export function getTemplateContent(templateName: string, data: any): TemplateContent {
@@ -28,7 +57,7 @@ export function getTemplateContent(templateName: string, data: any): TemplateCon
       subject = 'Welcome to Expenso! 🚀';
       category = 'marketing_emails';
       contentHtml = `
-        <h2 style="margin-top: 0; color: #ffffff; font-size: 20px; font-weight: 700;">Welcome, ${data.name || 'Financial Wizard'}!</h2>
+        <h2 style="margin-top: 0; color: #ffffff; font-size: 20px; font-weight: 700;">Welcome, ${escapeHtml(data.name || 'Financial Wizard')}!</h2>
         <p>Your email has been verified successfully. We are excited to help you take control of your financial health.</p>
         <p>Here are a few things you can do to get started right now:</p>
         <div class="accent-box">
@@ -60,7 +89,7 @@ export function getTemplateContent(templateName: string, data: any): TemplateCon
     case 'Verify Email':
       subject = 'Verify your Expenso account';
       category = 'security_emails';
-      const verifyUrl = `${APP_URL}/verify-email?token=${data.token}`;
+      const verifyUrl = validateAndEscapeUrl(data.token ? `/verify-email?token=${data.token}` : undefined);
       contentHtml = `
         <h2 style="margin-top: 0; color: #ffffff; font-size: 20px; font-weight: 700;">Verify Your Account</h2>
         <p>Thank you for signing up! Please verify your email address to activate your account and start managing your expenses.</p>
@@ -76,7 +105,7 @@ export function getTemplateContent(templateName: string, data: any): TemplateCon
     case 'Password Reset':
       subject = 'Reset your Expenso password';
       category = 'security_emails';
-      const resetUrl = `${APP_URL}/reset-password?token=${data.token}`;
+      const resetUrl = validateAndEscapeUrl(data.token ? `/reset-password?token=${data.token}` : undefined);
       contentHtml = `
         <h2 style="margin-top: 0; color: #ffffff; font-size: 20px; font-weight: 700;">Reset Your Password</h2>
         <p>You requested a password reset for your Expenso account. Click the button below to update your password credentials:</p>
@@ -108,50 +137,50 @@ export function getTemplateContent(templateName: string, data: any): TemplateCon
         <p>A new login was recorded for your account from a new browser or device.</p>
         <div class="accent-box">
           <strong>Device Details:</strong><br>
-          • Browser/OS: ${data.device || 'Unknown'}<br>
-          • IP Address: ${data.ip || 'Unknown'}<br>
-          • Date/Time: ${new Date().toLocaleString()}<br>
+          • Browser/OS: ${escapeHtml(data.device || 'Unknown')}<br>
+          • IP Address: ${escapeHtml(data.ip || 'Unknown')}<br>
+          • Date/Time: ${escapeHtml(new Date().toLocaleString())}<br>
         </div>
         <p>If this was you, no action is needed. If you do not recognize this session, please secure your account immediately.</p>
       `;
       break;
 
     case 'Budget Created':
-      subject = `Budget Alert: limit set for ${data.categoryName || 'Category'}`;
+      subject = `Budget Alert: limit set for ${escapeHtml(data.categoryName || 'Category')}`;
       category = 'budget_emails';
       contentHtml = `
         <h2 style="margin-top: 0; color: #ffffff; font-size: 20px; font-weight: 700;">Budget Limit Registered</h2>
         <p>A new spending budget limit has been successfully established.</p>
         <div class="accent-box">
-          <strong>Category Name:</strong> ${data.categoryName || 'Overall'}<br>
-          <strong>Monthly Limit:</strong> ₹${data.limit || '0'}<br>
-          <strong>Start Date:</strong> ${data.startsOn || 'Now'}
+          <strong>Category Name:</strong> ${escapeHtml(data.categoryName || 'Overall')}<br>
+          <strong>Monthly Limit:</strong> ₹${escapeHtml(data.limit || '0')}<br>
+          <strong>Start Date:</strong> ${escapeHtml(data.startsOn || 'Now')}
         </div>
       `;
       break;
 
     case 'Budget Updated':
-      subject = `Budget Alert: limit modified for ${data.categoryName || 'Category'}`;
+      subject = `Budget Alert: limit modified for ${escapeHtml(data.categoryName || 'Category')}`;
       category = 'budget_emails';
       contentHtml = `
         <h2 style="margin-top: 0; color: #ffffff; font-size: 20px; font-weight: 700;">Budget Limit Modified</h2>
         <p>Your spending budget has been adjusted.</p>
         <div class="table-container">
           <table class="table">
-            <tr><td><strong>Category</strong></td><td>${data.categoryName || 'Overall'}</td></tr>
-            <tr><td><strong>Old Limit</strong></td><td>₹${data.oldLimit || '0'}</td></tr>
-            <tr><td><strong>New Limit</strong></td><td>₹${data.newLimit || '0'}</td></tr>
+            <tr><td><strong>Category</strong></td><td>${escapeHtml(data.categoryName || 'Overall')}</td></tr>
+            <tr><td><strong>Old Limit</strong></td><td>₹${escapeHtml(data.oldLimit || '0')}</td></tr>
+            <tr><td><strong>New Limit</strong></td><td>₹${escapeHtml(data.newLimit || '0')}</td></tr>
           </table>
         </div>
       `;
       break;
 
     case 'Budget Deleted':
-      subject = `Budget Alert: limit removed for ${data.categoryName || 'Category'}`;
+      subject = `Budget Alert: limit removed for ${escapeHtml(data.categoryName || 'Category')}`;
       category = 'budget_emails';
       contentHtml = `
         <h2 style="margin-top: 0; color: #ef4444; font-size: 20px; font-weight: 700;">Budget Removed</h2>
-        <p>The spending budget for <strong>${data.categoryName || 'Category'}</strong> has been deleted.</p>
+        <p>The spending budget for <strong>${escapeHtml(data.categoryName || 'Category')}</strong> has been deleted.</p>
       `;
       break;
 
@@ -160,14 +189,14 @@ export function getTemplateContent(templateName: string, data: any): TemplateCon
     case 'Budget Threshold 90%':
     case 'Budget Exceeded':
       const pct = data.threshold || 100;
-      subject = `⚠️ Budget Warning: ${data.budgetName || 'Category'} is at ${pct}% of limit`;
+      subject = `⚠️ Budget Warning: ${escapeHtml(data.budgetName || 'Category')} is at ${escapeHtml(pct)}% of limit`;
       category = 'budget_emails';
       contentHtml = `
         <h2 style="margin-top: 0; color: #ef4444; font-size: 20px; font-weight: 700;">Budget Limit Warning</h2>
-        <p>You have reached <span class="highlight" style="color:#ef4444;">${pct}%</span> of your budget limit for <strong>${data.budgetName || 'Category'}</strong>.</p>
+        <p>You have reached <span class="highlight" style="color:#ef4444;">${escapeHtml(pct)}%</span> of your budget limit for <strong>${escapeHtml(data.budgetName || 'Category')}</strong>.</p>
         <div class="alert-box">
-          <strong>Budget Limit:</strong> ₹${data.limit || '0'}<br>
-          <strong>Current Spending:</strong> ₹${data.current || '0'}<br>
+          <strong>Budget Limit:</strong> ₹${escapeHtml(data.limit || '0')}<br>
+          <strong>Current Spending:</strong> ₹${escapeHtml(data.current || '0')}<br>
           <strong>Status:</strong> ${pct >= 100 ? 'Budget fully exceeded!' : 'Approaching budget ceiling.'}
         </div>
       `;
@@ -175,36 +204,36 @@ export function getTemplateContent(templateName: string, data: any): TemplateCon
 
     case 'Expense Created':
     case 'Expense Confirmation':
-      subject = `Expense Recorded: ${data.title || 'New Expense'}`;
+      subject = `Expense Recorded: ${escapeHtml(data.title || 'New Expense')}`;
       category = 'expense_emails';
       contentHtml = `
         <h2 style="margin-top: 0; color: #10b981; font-size: 20px; font-weight: 700;">Expense Logged Successfully</h2>
         <p>A new transaction has been registered under your account tracking.</p>
         <div class="table-container">
           <table class="table">
-            <tr><td><strong>Title</strong></td><td>${data.title || 'New Expense'}</td></tr>
-            <tr><td><strong>Amount</strong></td><td class="highlight">₹${data.amount || '0.00'}</td></tr>
-            <tr><td><strong>Category</strong></td><td>${data.categoryName || 'Uncategorized'}</td></tr>
-            <tr><td><strong>Date</strong></td><td>${data.date || 'N/A'}</td></tr>
-            <tr><td><strong>Notes</strong></td><td>${data.notes || 'N/A'}</td></tr>
+            <tr><td><strong>Title</strong></td><td>${escapeHtml(data.title || 'New Expense')}</td></tr>
+            <tr><td><strong>Amount</strong></td><td class="highlight">₹${escapeHtml(data.amount || '0.00')}</td></tr>
+            <tr><td><strong>Category</strong></td><td>${escapeHtml(data.categoryName || 'Uncategorized')}</td></tr>
+            <tr><td><strong>Date</strong></td><td>${escapeHtml(data.date || 'N/A')}</td></tr>
+            <tr><td><strong>Notes</strong></td><td>${escapeHtml(data.notes || 'N/A')}</td></tr>
           </table>
         </div>
       `;
       break;
 
     case 'Expense Updated':
-      subject = `Expense Updated: ${data.title || 'Expense'}`;
+      subject = `Expense Updated: ${escapeHtml(data.title || 'Expense')}`;
       category = 'expense_emails';
       contentHtml = `
         <h2 style="margin-top: 0; color: #6366f1; font-size: 20px; font-weight: 700;">Expense Updated</h2>
         <p>Your transaction has been updated successfully.</p>
         <div class="table-container">
           <table class="table">
-            <tr><td><strong>Current Title</strong></td><td>${data.title || 'Expense'}</td></tr>
-            <tr><td><strong>Current Amount</strong></td><td class="highlight">₹${data.amount || '0.00'}</td></tr>
-            <tr><td><strong>Category</strong></td><td>${data.categoryName || 'Uncategorized'}</td></tr>
-            ${data.oldAmount ? `<tr><td><strong>Previous Amount</strong></td><td>₹${data.oldAmount}</td></tr>` : ''}
-            ${data.oldTitle ? `<tr><td><strong>Previous Title</strong></td><td>${data.oldTitle}</td></tr>` : ''}
+            <tr><td><strong>Current Title</strong></td><td>${escapeHtml(data.title || 'Expense')}</td></tr>
+            <tr><td><strong>Current Amount</strong></td><td class="highlight">₹${escapeHtml(data.amount || '0.00')}</td></tr>
+            <tr><td><strong>Category</strong></td><td>${escapeHtml(data.categoryName || 'Uncategorized')}</td></tr>
+            ${data.oldAmount ? `<tr><td><strong>Previous Amount</strong></td><td>₹${escapeHtml(data.oldAmount)}</td></tr>` : ''}
+            ${data.oldTitle ? `<tr><td><strong>Previous Title</strong></td><td>${escapeHtml(data.oldTitle)}</td></tr>` : ''}
           </table>
         </div>
       `;
@@ -212,62 +241,62 @@ export function getTemplateContent(templateName: string, data: any): TemplateCon
 
     case 'Expense Deleted':
     case 'Expense Permanently Deleted':
-      subject = `Expense Removed: ${data.title || 'Expense'}`;
+      subject = `Expense Removed: ${escapeHtml(data.title || 'Expense')}`;
       category = 'expense_emails';
       contentHtml = `
         <h2 style="margin-top: 0; color: #ef4444; font-size: 20px; font-weight: 700;">Expense Removed</h2>
         <p>The following transaction was deleted from your account records:</p>
         <div class="accent-box" style="background: rgba(239, 68, 68, 0.08); border-left: 4px solid #ef4444; color: #fca5a5;">
-          • Title: <strong>${data.title || 'Expense'}</strong><br>
-          • Amount: <strong>₹${data.amount || '0.00'}</strong><br>
-          • Category: <strong>${data.categoryName || 'Uncategorized'}</strong>
+          • Title: <strong>${escapeHtml(data.title || 'Expense')}</strong><br>
+          • Amount: <strong>₹${escapeHtml(data.amount || '0.00')}</strong><br>
+          • Category: <strong>${escapeHtml(data.categoryName || 'Uncategorized')}</strong>
         </div>
       `;
       break;
 
     case 'Expense Restored':
-      subject = `Expense Restored: ${data.title || 'Expense'}`;
+      subject = `Expense Restored: ${escapeHtml(data.title || 'Expense')}`;
       category = 'expense_emails';
       contentHtml = `
         <h2 style="margin-top: 0; color: #10b981; font-size: 20px; font-weight: 700;">Expense Restored</h2>
         <p>The following transaction was successfully recovered and added back to your active list:</p>
         <div class="accent-box">
-          • Title: <strong>${data.title || 'Expense'}</strong><br>
-          • Amount: <strong>₹${data.amount || '0.00'}</strong><br>
-          • Category: <strong>${data.categoryName || 'Uncategorized'}</strong>
+          • Title: <strong>${escapeHtml(data.title || 'Expense')}</strong><br>
+          • Amount: <strong>₹${escapeHtml(data.amount || '0.00')}</strong><br>
+          • Category: <strong>${escapeHtml(data.categoryName || 'Uncategorized')}</strong>
         </div>
       `;
       break;
 
     case 'Family Invite':
     case 'Family Invitation':
-      subject = `Invitation to join Family Hub from ${data.inviterName || 'Owner'}`;
+      subject = `Invitation to join Family Hub from ${escapeHtml(data.inviterName || 'Owner')}`;
       category = 'family_emails';
       contentHtml = `
         <h2 style="margin-top: 0; color: #ffffff; font-size: 20px; font-weight: 700;">Join Family Hub</h2>
-        <p>You have been invited by <span class="highlight">${data.inviterName || 'A member'}</span> to join their family group <strong>${data.familyName || 'Family Account'}</strong>.</p>
+        <p>You have been invited by <span class="highlight">${escapeHtml(data.inviterName || 'A member')}</span> to join their family group <strong>${escapeHtml(data.familyName || 'Family Account')}</strong>.</p>
         <div style="text-align: center;">
-          <a href="${data.inviteUrl || APP_URL}" class="button">Accept Invitation</a>
+          <a href="${validateAndEscapeUrl(data.inviteUrl)}" class="button">Accept Invitation</a>
         </div>
       `;
       break;
 
     case 'Family Invitation Accepted':
     case 'Family Member Joined':
-      subject = `Family Invite Accepted: ${data.inviteeName || 'Member'} has joined! 🎉`;
+      subject = `Family Invite Accepted: ${escapeHtml(data.inviteeName || 'Member')} has joined! 🎉`;
       category = 'family_emails';
       contentHtml = `
         <h2 style="margin-top: 0; color: #ffffff; font-size: 20px; font-weight: 700;">New Member Joined Group</h2>
-        <p>${data.inviteeName || 'A user'} has accepted the invitation and joined the family group: <strong>${data.familyName || 'Family Account'}</strong>.</p>
+        <p>${escapeHtml(data.inviteeName || 'A user')} has accepted the invitation and joined the family group: <strong>${escapeHtml(data.familyName || 'Family Account')}</strong>.</p>
       `;
       break;
 
     case 'Family Invitation Declined':
-      subject = `Family Invite Declined by ${data.inviteeName || 'Invitee'}`;
+      subject = `Family Invite Declined by ${escapeHtml(data.inviteeName || 'Invitee')}`;
       category = 'family_emails';
       contentHtml = `
         <h2 style="margin-top: 0; color: #ffffff; font-size: 20px; font-weight: 700;">Invitation Declined</h2>
-        <p>${data.inviteeName || 'Invitee'} declined the invitation to join your family group: <strong>${data.familyName || 'Family'}</strong>.</p>
+        <p>${escapeHtml(data.inviteeName || 'Invitee')} declined the invitation to join your family group: <strong>${escapeHtml(data.familyName || 'Family')}</strong>.</p>
       `;
       break;
 
@@ -277,7 +306,7 @@ export function getTemplateContent(templateName: string, data: any): TemplateCon
       category = 'family_emails';
       contentHtml = `
         <h2 style="margin-top: 0; color: #ffffff; font-size: 20px; font-weight: 700;">Removed from Family Hub</h2>
-        <p>You have been removed from the family group: <strong>${data.familyName || 'Family'}</strong> by the administrator.</p>
+        <p>You have been removed from the family group: <strong>${escapeHtml(data.familyName || 'Family')}</strong> by the administrator.</p>
       `;
       break;
 
@@ -287,45 +316,45 @@ export function getTemplateContent(templateName: string, data: any): TemplateCon
       category = 'family_emails';
       contentHtml = `
         <h2 style="margin-top: 0; color: #ffffff; font-size: 20px; font-weight: 700;">Ownership Role Transferred</h2>
-        <p>You have been promoted to the Owner role for family hub: <strong>${data.familyName || 'Family'}</strong>.</p>
+        <p>You have been promoted to the Owner role for family hub: <strong>${escapeHtml(data.familyName || 'Family')}</strong>.</p>
       `;
       break;
 
     case 'Family Budget Created':
-      subject = `Family Budget Alert: Shared budget limit set for ${data.categoryName || 'Category'}`;
+      subject = `Family Budget Alert: Shared budget limit set for ${escapeHtml(data.categoryName || 'Category')}`;
       category = 'family_emails';
       contentHtml = `
         <h2 style="margin-top: 0; color: #ffffff; font-size: 20px; font-weight: 700;">Shared Family Budget Limit</h2>
         <p>A new shared budget has been created for the family group.</p>
         <div class="accent-box">
-          • Budget Limit: <strong>₹${data.limit || '0'}</strong><br>
-          • Category: <strong>${data.categoryName || 'Overall'}</strong>
+          • Budget Limit: <strong>₹${escapeHtml(data.limit || '0')}</strong><br>
+          • Category: <strong>${escapeHtml(data.categoryName || 'Overall')}</strong>
         </div>
       `;
       break;
 
     case 'Family Budget Updated':
-      subject = `Family Budget Alert: Shared budget adjusted for ${data.categoryName || 'Category'}`;
+      subject = `Family Budget Alert: Shared budget adjusted for ${escapeHtml(data.categoryName || 'Category')}`;
       category = 'family_emails';
       contentHtml = `
         <h2 style="margin-top: 0; color: #ffffff; font-size: 20px; font-weight: 700;">Shared Family Budget Modified</h2>
         <p>A shared family budget has been updated:</p>
         <div class="table-container">
           <table class="table">
-            <tr><td>Category</td><td>${data.categoryName || 'Overall'}</td></tr>
-            <tr><td>Old Limit</td><td>₹${data.oldLimit || '0'}</td></tr>
-            <tr><td>New Limit</td><td>₹${data.newLimit || '0'}</td></tr>
+            <tr><td>Category</td><td>${escapeHtml(data.categoryName || 'Overall')}</td></tr>
+            <tr><td>Old Limit</td><td>₹${escapeHtml(data.oldLimit || '0')}</td></tr>
+            <tr><td>New Limit</td><td>₹${escapeHtml(data.newLimit || '0')}</td></tr>
           </table>
         </div>
       `;
       break;
 
     case 'Family Budget Deleted':
-      subject = `Family Budget Alert: Shared budget deleted for ${data.categoryName || 'Category'}`;
+      subject = `Family Budget Alert: Shared budget deleted for ${escapeHtml(data.categoryName || 'Category')}`;
       category = 'family_emails';
       contentHtml = `
         <h2 style="margin-top: 0; color: #ef4444; font-size: 20px; font-weight: 700;">Shared Family Budget Deleted</h2>
-        <p>The shared family budget limit for <strong>${data.categoryName || 'Category'}</strong> has been removed.</p>
+        <p>The shared family budget limit for <strong>${escapeHtml(data.categoryName || 'Category')}</strong> has been removed.</p>
       `;
       break;
 
@@ -337,47 +366,47 @@ export function getTemplateContent(templateName: string, data: any): TemplateCon
         <p>A new shared expense was logged in your family tracker:</p>
         <div class="table-container">
           <table class="table">
-            <tr><td>Title</td><td>${data.title || 'New Expense'}</td></tr>
-            <tr><td>Amount</td><td style="color:#ef4444;">₹${data.amount || '0'}</td></tr>
-            <tr><td>Added By</td><td>${data.addedBy || 'Member'}</td></tr>
+            <tr><td>Title</td><td>${escapeHtml(data.title || 'New Expense')}</td></tr>
+            <tr><td>Amount</td><td style="color:#ef4444;">₹${escapeHtml(data.amount || '0')}</td></tr>
+            <tr><td>Added By</td><td>${escapeHtml(data.addedBy || 'Member')}</td></tr>
           </table>
         </div>
       `;
       break;
 
     case 'Workspace Invitation':
-      subject = `Workspace Invitation: Join ${data.workspaceName || 'Workspace'}`;
+      subject = `Workspace Invitation: Join ${escapeHtml(data.workspaceName || 'Workspace')}`;
       category = 'workspace_emails';
       contentHtml = `
         <h2 style="margin-top: 0; color: #ffffff; font-size: 20px; font-weight: 700;">Workspace Invite</h2>
-        <p>You have been invited to join the workspace: <strong>${data.workspaceName || 'Workspace'}</strong>.</p>
+        <p>You have been invited to join the workspace: <strong>${escapeHtml(data.workspaceName || 'Workspace')}</strong>.</p>
         <div style="text-align: center;">
-          <a href="${data.inviteUrl || APP_URL}" class="button">Accept Invitation</a>
+          <a href="${validateAndEscapeUrl(data.inviteUrl)}" class="button">Accept Invitation</a>
         </div>
       `;
       break;
 
     case 'Workspace Member Removed':
-      subject = `Workspace: Member Removed from ${data.workspaceName || 'Workspace'}`;
+      subject = `Workspace: Member Removed from ${escapeHtml(data.workspaceName || 'Workspace')}`;
       category = 'workspace_emails';
       contentHtml = `
         <h2 style="margin-top: 0; color: #ffffff; font-size: 20px; font-weight: 700;">Member Removed Notice</h2>
-        <p>${data.memberName || 'A member'} was removed from workspace: <strong>${data.workspaceName || 'Workspace'}</strong>.</p>
+        <p>${escapeHtml(data.memberName || 'A member')} was removed from workspace: <strong>${escapeHtml(data.workspaceName || 'Workspace')}</strong>.</p>
       `;
       break;
 
     case 'AI Receipt Processed':
     case 'Receipt Processed':
-      subject = `Receipt Scan Complete: ${data.merchant || 'Processed'}`;
+      subject = `Receipt Scan Complete: ${escapeHtml(data.merchant || 'Processed')}`;
       category = 'ai_emails';
       contentHtml = `
         <h2 style="margin-top: 0; color: #ffffff; font-size: 20px; font-weight: 700;">Receipt OCR Scanned</h2>
         <p>Our AI has finished scanning and cleaning up your receipt details.</p>
         <div class="table-container">
           <table class="table">
-            <tr><td><strong>Merchant</strong></td><td>${data.merchant || 'N/A'}</td></tr>
-            <tr><td><strong>Total Amount</strong></td><td>₹${data.amount || '0.00'}</td></tr>
-            <tr><td><strong>Date</strong></td><td>${data.date || 'N/A'}</td></tr>
+            <tr><td><strong>Merchant</strong></td><td>${escapeHtml(data.merchant || 'N/A')}</td></tr>
+            <tr><td><strong>Total Amount</strong></td><td>₹${escapeHtml(data.amount || '0.00')}</td></tr>
+            <tr><td><strong>Date</strong></td><td>${escapeHtml(data.date || 'N/A')}</td></tr>
           </table>
         </div>
       `;
@@ -391,23 +420,23 @@ export function getTemplateContent(templateName: string, data: any): TemplateCon
         <h2 style="margin-top: 0; color: #ef4444; font-size: 20px; font-weight: 700;">Unusual Transaction Spike Flagged</h2>
         <p>We detected an outlier transaction that differs from your typical pattern.</p>
         <div class="alert-box">
-          • Amount: <strong>₹${data.amount || '0'}</strong><br>
-          • Explanation: <strong>${data.explanation || 'N/A'}</strong>
+          • Amount: <strong>₹${escapeHtml(data.amount || '0')}</strong><br>
+          • Explanation: <strong>${escapeHtml(data.explanation || 'N/A')}</strong>
         </div>
       `;
       break;
 
     case 'Monthly Financial Report':
     case 'Monthly Financial Summary':
-      subject = `Monthly Financial Report for ${data.month || 'Month'}`;
+      subject = `Monthly Financial Report for ${escapeHtml(data.month || 'Month')}`;
       category = 'monthly_reports';
       contentHtml = `
         <h2 style="margin-top: 0; color: #ffffff; font-size: 20px; font-weight: 700;">Monthly Summary Report</h2>
         <p>Here is your financial performance digest for the past month:</p>
         <div class="table-container">
           <table class="table">
-            <tr><td>Total Spent</td><td style="color: #ef4444;">₹${data.totalSpent || '0'}</td></tr>
-            <tr><td>Savings Saved</td><td style="color: #10b981;">₹${data.savings || '0'}</td></tr>
+            <tr><td>Total Spent</td><td style="color: #ef4444;">₹${escapeHtml(data.totalSpent || '0')}</td></tr>
+            <tr><td>Savings Saved</td><td style="color: #10b981;">₹${escapeHtml(data.savings || '0')}</td></tr>
           </table>
         </div>
       `;
@@ -421,7 +450,7 @@ export function getTemplateContent(templateName: string, data: any): TemplateCon
         <h2 style="margin-top: 0; color: #ffffff; font-size: 20px; font-weight: 700;">Weekly Spending Summary</h2>
         <p>Here is your weekly summary checklist:</p>
         <div class="accent-box">
-          • Total spent this week: <strong>₹${data.totalSpent || '0'}</strong>
+          • Total spent this week: <strong>₹${escapeHtml(data.totalSpent || '0')}</strong>
         </div>
       `;
       break;
@@ -429,11 +458,12 @@ export function getTemplateContent(templateName: string, data: any): TemplateCon
     case 'CSV Export Ready':
       subject = 'Your CSV expense export is ready! 📁';
       category = 'security_emails';
+      const csvUrl = validateAndEscapeUrl(data.downloadUrl);
       contentHtml = `
         <h2 style="margin-top: 0; color: #ffffff; font-size: 20px; font-weight: 700;">CSV Export Complete</h2>
         <p>Your requested CSV spreadsheet export has been generated successfully.</p>
         <div style="text-align: center;">
-          <a href="${data.downloadUrl || APP_URL}" class="button">Download CSV Report</a>
+          <a href="${csvUrl}" class="button">Download CSV Report</a>
         </div>
       `;
       break;
@@ -442,11 +472,12 @@ export function getTemplateContent(templateName: string, data: any): TemplateCon
     case 'PDF Report Ready':
       subject = 'Your PDF financial report is ready! 📄';
       category = 'security_emails';
+      const pdfUrl = validateAndEscapeUrl(data.downloadUrl);
       contentHtml = `
         <h2 style="margin-top: 0; color: #ffffff; font-size: 20px; font-weight: 700;">PDF Report Complete</h2>
         <p>Your requested financial analytics PDF report has been compiled and is ready for download.</p>
         <div style="text-align: center;">
-          <a href="${data.downloadUrl || APP_URL}" class="button">Download PDF Report</a>
+          <a href="${pdfUrl}" class="button">Download PDF Report</a>
         </div>
       `;
       break;
@@ -454,11 +485,11 @@ export function getTemplateContent(templateName: string, data: any): TemplateCon
     default:
       // Branded generic fallback for unhandled template names
       category = 'security_emails'; // Fallback to security (never opt out)
-      subject = data.subject || `${templateName} Alert`;
+      subject = escapeHtml(data.subject || `${templateName} Alert`);
       contentHtml = `
-        <h2 style="margin-top: 0; color: #ffffff; font-size: 20px; font-weight: 700;">${templateName}</h2>
-        <p>${data.message || 'You have received a system alert from Expenso.'}</p>
-        ${data.details ? `<div class="accent-box">${data.details}</div>` : ''}
+        <h2 style="margin-top: 0; color: #ffffff; font-size: 20px; font-weight: 700;">${escapeHtml(templateName)}</h2>
+        <p>${escapeHtml(data.message || 'You have received a system alert from Expenso.')}</p>
+        ${data.details ? `<div class="accent-box">${escapeHtml(data.details)}</div>` : ''}
       `;
   }
 

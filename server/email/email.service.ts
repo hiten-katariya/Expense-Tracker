@@ -1,5 +1,5 @@
 import { queueEmail as coreQueueEmail } from './emailQueue.js';
-import { triggerQueueProcessing } from './email.worker.ts';
+import { triggerQueueProcessing } from './email.worker.js';
 
 /**
  * Enqueues a notification email inside the database logs after checking validation,

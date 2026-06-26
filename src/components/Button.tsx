@@ -52,6 +52,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         whileTap={disabled || isLoading ? {} : { scale: 0.98 }}
         className={cn(baseStyles, variants[variant], sizes[size], className)}
         disabled={disabled || isLoading}
+        aria-busy={isLoading}
         {...(props as any)}
       >
         {isLoading ? (
@@ -113,6 +114,7 @@ export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
         whileTap={disabled || isLoading ? {} : { scale: 0.95 }}
         className={cn(baseStyles, variants[variant], sizes[size], className)}
         disabled={disabled || isLoading}
+        aria-busy={isLoading}
         {...(props as any)}
       >
         {isLoading ? (

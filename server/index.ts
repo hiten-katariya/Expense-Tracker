@@ -31,11 +31,108 @@ import { runGeminiPrompt } from './services/gemini.service.js';
 import { logAuditEvent } from './services/audit.service.js';
 import { generateGdprExport, scheduleGdprSoftDelete, verifyUserPassword, runGdprDeletionSweep, runAuditLogsRetentionSweep } from './services/gdpr.service.js';
 import { recordRequestMetrics, recordSlowQuery, recordJavascriptError, getPerformanceHealthStats } from './services/performance.service.js';
+import { z } from 'zod';
+
+// Zod schemas for input validation
+const createFamilySchema = z.object({
+  name: z.string().min(1, 'Family name is required').max(100, 'Family name cannot exceed 100 characters'),
+  monthly_budget: z.union([z.number().positive('Monthly budget must be positive'), z.null()]).optional(),
+  currency_code: z.string().length(3, 'Currency code must be exactly 3 characters').regex(/^[A-Z]{3}$/, 'Currency code must be uppercase letters').optional()
+});
+
+const familyInviteSchema = z.object({
+  familyId: z.string().uuid('Invalid family ID format'),
+  email: z.string().email('Invalid email address format').toLowerCase()
+});
+
+const joinFamilySchema = z.object({
+  inviteCode: z.string().min(1, 'Invite code is required').max(20, 'Invite code is too long')
+});
+
+const aiChatSchema = z.object({
+  message: z.string().min(1, 'Message is required').max(5000, 'Message cannot exceed 5000 characters'),
+  history: z.array(z.any()).optional()
+});
+
+const gdprDeleteSchema = z.object({
+  password: z.string().min(1, 'Password confirmation is required'),
+  reason: z.string().max(500, 'Reason cannot exceed 500 characters').nullable().optional()
+});
+
+const receiptUploadSchema = z.object({
+  image: z.string().min(1, 'Receipt image base64 data is required'),
+  name: z.string().max(255, 'Filename is too long').nullable().optional()
+});
+
+const receiptSignSchema = z.object({
+  storagePath: z.string().min(1, 'Storage path is required')
+});
+
+// Middleware to run Zod schema validation on req.body
+function validateBody<T extends z.ZodTypeAny>(schema: T) {
+  return (req: any, res: any, next: any) => {
+    const parseResult = schema.safeParse(req.body);
+    if (!parseResult.success) {
+      return res.status(400).json({
+        error: 'Validation failed',
+        details: parseResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')
+      });
+    }
+    req.body = parseResult.data;
+    next();
+  };
+}
+
+// Helper to validate UUID query/path parameters
+function isValidUuid(id: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+}
+
+// Helper to validate alphanumeric tokens
+function isValidToken(token: string): boolean {
+  return /^[A-Za-z0-9\-_.]+$/.test(token);
+}
+
+// Helper to sanitize filenames (blocking traversal attempts like ..)
+function sanitizeFileName(name: string | null | undefined): string {
+  const baseName = name || 'receipt.png';
+  return baseName
+    .replace(/[^a-zA-Z0-9.-_]/g, '_') // only allow alphanumeric, dots, hyphens, underscores
+    .replace(/\.\.+/g, '.'); // collapse multiple dots to prevent path traversal like ..
+}
+
+// Helper to verify uploaded file signatures (magic numbers) for JPEG, PNG, WEBP, and PDF
+function isValidFileSignature(buffer: Buffer): boolean {
+  if (buffer.length < 4) return false;
+  
+  // PNG signature: 89 50 4E 47
+  if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) {
+    return true;
+  }
+  // JPEG signature: FF D8 FF
+  if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) {
+    return true;
+  }
+  // PDF signature: 25 50 44 46 (%PDF)
+  if (buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46) {
+    return true;
+  }
+  // WEBP signature: starts with RIFF (52 49 46 46) and has WEBP (57 45 42 50) at offset 8
+  if (buffer.length >= 12) {
+    const isRiff = buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46;
+    const isWebp = buffer[8] === 0x57 && buffer[9] === 0x45 && buffer[10] === 0x42 && buffer[11] === 0x50;
+    if (isRiff && isWebp) return true;
+  }
+  return false;
+}
 
 // Load environment variables from the root .env.local file
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 
 const app = express();
+// Trust reverse proxy header configurations (like Cloudflare, Nginx, or Vercel)
+// to parse actual client IP addresses correctly for rate limiting.
+app.set('trust proxy', 1);
 const port = process.env.PORT || 3001;
 
 // ── Rate Limiters ──
@@ -79,6 +176,14 @@ const familyInviteLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+const adminLimiter = rateLimit({
+  windowMs: 900000,
+  max: 60,
+  message: { error: 'Not found' },
+  standardHeaders: false,
+  legacyHeaders: false,
+});
+
 // Apply rate limiters
 app.use('/api/', globalLimiter);
 app.use('/api/auth/', authLimiter);
@@ -86,6 +191,7 @@ app.use('/api/receipts/upload', uploadLimiter);
 app.use('/api/ai/scan-receipt', uploadLimiter);
 app.use('/api/ai/', aiLimiter);
 app.use('/api/families/invite', familyInviteLimiter);
+app.use('/api/admin/', adminLimiter);
 
 // ── Security Headers (Helmet & CORS) ──
 app.use(helmet({
@@ -146,8 +252,6 @@ app.use((req, res, next) => {
 const allowPublicRoutes = [
   '/api/auth/login',
   '/api/auth/register',
-  '/api/auth/verify-email',
-  '/api/auth/reset-password',
   '/api/health',
 ];
 
@@ -167,6 +271,12 @@ app.use(async (req, res, next) => {
     if (error || !user) {
       return res.status(401).json({ error: 'Unauthorized: Invalid or expired token' });
     }
+
+    // Force user email verification on protected API routes
+    if (!user.email_confirmed_at) {
+      return res.status(403).json({ error: 'Forbidden: Email verification is required to access this resource.' });
+    }
+
     (req as any).user = user;
     (req as any).token = token;
     next();
@@ -196,35 +306,7 @@ app.post('/api/auth/send-verification-email', async (req, res) => {
   }
 });
 
-// Endpoint to verify the token (calls the DB function verify_user_email)
-app.post('/api/auth/verify-email', async (req, res) => {
-  const { token } = req.body;
 
-  if (!token) {
-    return res.status(400).json({ error: 'Verification token is required' });
-  }
-
-  try {
-    // Call DB verify RPC function
-    const { data: verified, error } = await supabase.rpc('verify_user_email', {
-      token_value: token,
-    });
-
-    if (error) {
-      console.error('Database RPC error verifying email:', error);
-      return res.status(500).json({ error: 'Failed to query verification database' });
-    }
-
-    if (!verified) {
-      return res.status(400).json({ error: 'Invalid or expired verification token' });
-    }
-
-    return res.status(200).json({ success: true, message: 'Email verified successfully!' });
-  } catch (error) {
-    console.error('Error in verify-email endpoint:', error);
-    return res.status(500).json({ error: 'Internal server error verifying token' });
-  }
-});
 
 // --- MOCK/TEST EMAIL TRIGGER ENDPOINTS ---
 
@@ -286,6 +368,9 @@ app.post('/api/test/family-invite', async (req, res) => {
 
 const authenticateUser = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   if ((req as any).user && (req as any).token) {
+    if (!(req as any).user.email_confirmed_at) {
+      return res.status(403).json({ error: 'Forbidden: Email verification is required to access this resource.' });
+    }
     return next();
   }
   const authHeader = req.headers.authorization;
@@ -299,6 +384,12 @@ const authenticateUser = async (req: express.Request, res: express.Response, nex
     if (error || !user) {
       return res.status(401).json({ error: 'Unauthorized: Invalid token' });
     }
+
+    // Force user email verification on protected API routes
+    if (!user.email_confirmed_at) {
+      return res.status(403).json({ error: 'Forbidden: Email verification is required to access this resource.' });
+    }
+
     (req as any).user = user;
     (req as any).token = token;
     next();
@@ -322,13 +413,9 @@ const getUserSupabase = (req: express.Request) => {
 // --- FAMILY HUB ENDPOINTS ---
 
 // Create Family
-app.post('/api/families', authenticateUser, async (req, res) => {
+app.post('/api/families', authenticateUser, validateBody(createFamilySchema), async (req, res) => {
   const { name, monthly_budget, currency_code } = req.body;
   const user = (req as any).user;
-
-  if (!name || name.trim() === '') {
-    return res.status(400).json({ error: 'Family name is required' });
-  }
 
   const inviteCode = Math.random().toString(36).substring(2, 10).toUpperCase();
   const userSupabase = getUserSupabase(req);
@@ -384,13 +471,9 @@ app.post('/api/families', authenticateUser, async (req, res) => {
 });
 
 // Invite Member to Family
-app.post('/api/families/invite', authenticateUser, async (req, res) => {
+app.post('/api/families/invite', authenticateUser, validateBody(familyInviteSchema), async (req, res) => {
   const { familyId, email } = req.body;
   const user = (req as any).user;
-
-  if (!familyId || !email) {
-    return res.status(400).json({ error: 'Family ID and Email are required' });
-  }
 
   const userSupabase = getUserSupabase(req);
 
@@ -461,6 +544,9 @@ app.post('/api/families/invite', authenticateUser, async (req, res) => {
 // Accept Invitation
 app.post('/api/families/invites/:token/accept', authenticateUser, async (req, res) => {
   const { token } = req.params;
+  if (!isValidToken(String(token))) {
+    return res.status(400).json({ error: 'Invalid invitation token format.' });
+  }
   const user = (req as any).user;
   const userSupabase = getUserSupabase(req);
 
@@ -584,6 +670,9 @@ app.post('/api/families/invites/:token/accept', authenticateUser, async (req, re
 // Decline Invitation
 app.post('/api/families/invites/:token/decline', authenticateUser, async (req, res) => {
   const { token } = req.params;
+  if (!isValidToken(String(token))) {
+    return res.status(400).json({ error: 'Invalid invitation token format.' });
+  }
   const user = (req as any).user;
   const userSupabase = getUserSupabase(req);
 
@@ -632,14 +721,10 @@ app.post('/api/families/invites/:token/decline', authenticateUser, async (req, r
 });
 
 // Join Family by Invite Code
-app.post('/api/families/join-by-code', authenticateUser, async (req, res) => {
+app.post('/api/families/join-by-code', authenticateUser, validateBody(joinFamilySchema), async (req, res) => {
   const { inviteCode } = req.body;
   const user = (req as any).user;
   const userSupabase = getUserSupabase(req);
-
-  if (!inviteCode || inviteCode.trim() === '') {
-    return res.status(400).json({ error: 'Invite code is required' });
-  }
 
   try {
     // 1. Call DB join function
@@ -692,6 +777,9 @@ app.post('/api/families/join-by-code', authenticateUser, async (req, res) => {
 // Get Family Details
 app.get('/api/families/:id', authenticateUser, async (req, res) => {
   const { id } = req.params;
+  if (!isValidUuid(String(id))) {
+    return res.status(400).json({ error: 'Invalid family ID format.' });
+  }
   const userSupabase = getUserSupabase(req);
 
   try {
@@ -716,6 +804,9 @@ app.get('/api/families/:id', authenticateUser, async (req, res) => {
 // Get Family Members
 app.get('/api/families/:id/members', authenticateUser, async (req, res) => {
   const { id } = req.params;
+  if (!isValidUuid(String(id))) {
+    return res.status(400).json({ error: 'Invalid family ID format.' });
+  }
   const userSupabase = getUserSupabase(req);
 
   try {
@@ -739,6 +830,9 @@ app.get('/api/families/:id/members', authenticateUser, async (req, res) => {
 // Remove Member from Family
 app.delete('/api/families/:familyId/members/:memberId', authenticateUser, async (req, res) => {
   const { familyId, memberId } = req.params;
+  if (!isValidUuid(String(familyId)) || !isValidUuid(String(memberId))) {
+    return res.status(400).json({ error: 'Invalid identifier format.' });
+  }
   const userSupabase = getUserSupabase(req);
 
   try {
@@ -765,9 +859,9 @@ app.delete('/api/families/:familyId/members/:memberId', authenticateUser, async 
 
     await logAuditEvent({
       userId: (req as any).user.id,
-      familyId,
+      familyId: familyId as string,
       entityType: 'family_member',
-      entityId: memberId,
+      entityId: memberId as string,
       eventType: 'family_member_removed',
       req,
     });
@@ -782,6 +876,9 @@ app.delete('/api/families/:familyId/members/:memberId', authenticateUser, async 
 // Leave Family
 app.post('/api/families/:id/leave', authenticateUser, async (req, res) => {
   const { id } = req.params;
+  if (!isValidUuid(String(id))) {
+    return res.status(400).json({ error: 'Invalid family ID format.' });
+  }
   const user = (req as any).user;
   const userSupabase = getUserSupabase(req);
 
@@ -834,6 +931,9 @@ app.post('/api/families/:id/leave', authenticateUser, async (req, res) => {
 // Send Monthly Summary Report (Owners/Admins only)
 app.post('/api/families/:id/monthly-summary/send', authenticateUser, async (req, res) => {
   const { id } = req.params;
+  if (!isValidUuid(String(id))) {
+    return res.status(400).json({ error: 'Invalid family ID format.' });
+  }
   const user = (req as any).user;
   const userSupabase = getUserSupabase(req);
 
@@ -1098,6 +1198,17 @@ app.post('/api/ai/scan-receipt', authenticateUser, async (req, res) => {
 
   try {
     const imageBuffer = Buffer.from(image, 'base64');
+    
+    // 1. Verify maximum file size of 10MB
+    if (imageBuffer.length > 10 * 1024 * 1024) {
+      return res.status(400).json({ error: 'Receipt image exceeds maximum size limit of 10MB.' });
+    }
+
+    // 2. Magic signature check (ensure it is JPEG, PNG, WEBP, or PDF)
+    if (!isValidFileSignature(imageBuffer)) {
+      return res.status(400).json({ error: 'Invalid file signature. Only JPEG, PNG, WEBP, and PDF files are allowed.' });
+    }
+
     const result = await processAndCacheReceipt(userSupabase, userId, imageBuffer, categories);
     return res.status(200).json(result);
   } catch (error) {
@@ -1107,14 +1218,10 @@ app.post('/api/ai/scan-receipt', authenticateUser, async (req, res) => {
 });
 
 // 3. AI Chat Agent
-app.post('/api/ai/chat', authenticateUser, async (req, res) => {
+app.post('/api/ai/chat', authenticateUser, validateBody(aiChatSchema), async (req, res) => {
   const { message, history } = req.body;
   const user = (req as any).user;
   const userId = user.id;
-
-  if (!message) {
-    return res.status(400).json({ error: 'Missing message string.' });
-  }
 
   const userSupabase = getUserSupabase(req);
 
@@ -1695,7 +1802,7 @@ app.post('/api/test/all-email-templates', authenticateUser, async (req, res) => 
 // --- GDPR COMPLIANCE ENDPOINTS ---
 
 // GET /api/gdpr/export - Initiates a structured download of all personal user data as JSON & CSV in a ZIP archive
-app.get('/api/gdpr/export', authenticateUser, async (req, res) => {
+app.get('/api/gdpr/export', authLimiter, authenticateUser, async (req, res) => {
   const user = (req as any).user;
   res.setHeader('Content-Type', 'application/zip');
   res.setHeader('Content-Disposition', `attachment; filename=gdpr_export_${user.id}.zip`);
@@ -1725,13 +1832,9 @@ app.get('/api/gdpr/export', authenticateUser, async (req, res) => {
 });
 
 // POST /api/gdpr/delete - Checks credentials and schedules account soft deletion with a 30-day delay
-app.post('/api/gdpr/delete', authenticateUser, async (req, res) => {
+app.post('/api/gdpr/delete', authLimiter, authenticateUser, validateBody(gdprDeleteSchema), async (req, res) => {
   const user = (req as any).user;
   const { password, reason } = req.body;
-
-  if (!password) {
-    return res.status(400).json({ error: 'Password confirmation is required.' });
-  }
 
   const isValidPassword = await verifyUserPassword(user.email, password);
   if (!isValidPassword) {
@@ -1770,18 +1873,27 @@ app.get('/api/health', async (req, res) => {
 // --- PRIVATE RECEIPT STORAGE ENDPOINTS ---
 
 // POST /api/receipts/upload - Stores scanned receipt uploads in private storage bucket and returns signed URL
-app.post('/api/receipts/upload', authenticateUser, async (req, res) => {
+app.post('/api/receipts/upload', authenticateUser, validateBody(receiptUploadSchema), async (req, res) => {
   const { image, name } = req.body;
   const user = (req as any).user;
 
-  if (!image) {
-    return res.status(400).json({ error: 'Receipt image string is required.' });
-  }
-
   try {
     const imageBuffer = Buffer.from(image, 'base64');
+    
+    // 1. Verify maximum file size of 10MB
+    if (imageBuffer.length > 10 * 1024 * 1024) {
+      return res.status(400).json({ error: 'Receipt image exceeds maximum size limit of 10MB.' });
+    }
+
+    // 2. Magic signature check (ensure it is JPEG, PNG, WEBP, or PDF)
+    if (!isValidFileSignature(imageBuffer)) {
+      return res.status(400).json({ error: 'Invalid file signature. Only JPEG, PNG, WEBP, and PDF files are allowed.' });
+    }
+
+    // 3. Sanitize filename to prevent path traversal
+    const cleanName = sanitizeFileName(name);
     const fileHash = crypto.createHash('md5').update(imageBuffer).digest('hex');
-    const fileName = `${user.id}/${fileHash}_${name || 'receipt.png'}`;
+    const fileName = `${user.id}/${fileHash}_${cleanName}`;
 
     // Upload to private Supabase Storage bucket 'receipts'
     const { error: uploadError } = await supabaseAdmin.storage
@@ -1823,11 +1935,13 @@ app.post('/api/receipts/upload', authenticateUser, async (req, res) => {
 });
 
 // POST /api/receipts/sign - Generates fresh signed URLs for receipt paths on-demand
-app.post('/api/receipts/sign', authenticateUser, async (req, res) => {
+app.post('/api/receipts/sign', authenticateUser, validateBody(receiptSignSchema), async (req, res) => {
   const { storagePath } = req.body;
+  const user = (req as any).user;
 
-  if (!storagePath) {
-    return res.status(400).json({ error: 'Storage path is required.' });
+  // IDOR Protection: Ensure storagePath starts with the authenticated user's ID
+  if (!storagePath.startsWith(`${user.id}/`)) {
+    return res.status(403).json({ error: 'Access Denied: You are not authorized to access this receipt.' });
   }
 
   try {
@@ -1866,6 +1980,450 @@ app.get('/api/audit-logs', authenticateUser, async (req, res) => {
   } catch (err: any) {
     console.error('Error fetching audit logs:', err);
     return res.status(500).json({ error: err.message || 'Failed to fetch audit logs.' });
+  }
+});
+
+// --- SUPER ADMIN PANEL ROUTES (READ-ONLY) ---
+
+// Admin middleware: dual-gate (email whitelist + database is_admin). Always returns 404 for unauthorized.
+async function requireAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const user = (req as any).user;
+  if (!user) return res.status(404).json({ error: 'Not found' });
+
+  // Gate 1: Email whitelist
+  const adminEmail = process.env.ADMIN_EMAIL;
+  if (!adminEmail || user.email !== adminEmail) {
+    logAuditEvent({
+      userId: user.id, entityType: 'admin_access', entityId: null,
+      eventType: 'admin_access_denied', req,
+      newValue: { reason: 'email_mismatch', attempted_email: user.email }
+    });
+    return res.status(404).json({ error: 'Not found' });
+  }
+
+  // Gate 2: Database role check via service role
+  try {
+    const { data: profile, error } = await supabaseAdmin
+      .from('profiles').select('is_admin').eq('id', user.id).single();
+    if (error || !profile?.is_admin) {
+      logAuditEvent({
+        userId: user.id, entityType: 'admin_access', entityId: null,
+        eventType: 'admin_access_denied', req,
+        newValue: { reason: 'not_admin_in_db' }
+      });
+      return res.status(404).json({ error: 'Not found' });
+    }
+  } catch (err) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+
+  // Audit successful admin access
+  logAuditEvent({
+    userId: user.id, entityType: 'admin_access', entityId: null,
+    eventType: 'admin_page_accessed', req,
+    newValue: { path: req.path }
+  });
+  next();
+}
+
+// GET /api/admin/stats — Dashboard overview cards
+app.get('/api/admin/stats', authenticateUser, requireAdmin, async (req, res) => {
+  try {
+    const [users, expenses, budgets, families, workspaces, emailLogs, aiUsage, ocrCache] = await Promise.all([
+      supabaseAdmin.from('profiles').select('id', { count: 'exact', head: true }),
+      supabaseAdmin.from('expenses').select('id', { count: 'exact', head: true }),
+      supabaseAdmin.from('budgets').select('id', { count: 'exact', head: true }),
+      supabaseAdmin.from('families').select('id', { count: 'exact', head: true }),
+      supabaseAdmin.from('workspaces').select('id', { count: 'exact', head: true }),
+      supabaseAdmin.from('email_logs').select('id', { count: 'exact', head: true }),
+      supabaseAdmin.from('ai_usage_logs').select('id', { count: 'exact', head: true }),
+      supabaseAdmin.from('receipt_ocr_cache').select('id', { count: 'exact', head: true }),
+    ]);
+
+    // Expenses created today
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const { count: expensesToday } = await supabaseAdmin
+      .from('expenses').select('id', { count: 'exact', head: true })
+      .gte('created_at', todayStart.toISOString());
+
+    // Daily active users (users with expenses today)
+    const { data: dauData } = await supabaseAdmin
+      .from('expenses').select('user_id')
+      .gte('created_at', todayStart.toISOString());
+    const uniqueActiveUsers = new Set(dauData?.map(d => d.user_id) || []).size;
+
+    // Emails sent
+    const { count: emailsSent } = await supabaseAdmin
+      .from('email_logs').select('id', { count: 'exact', head: true })
+      .eq('status', 'sent');
+
+    // Server health
+    const health = getPerformanceHealthStats();
+
+    return res.status(200).json({
+      totalUsers: users.count || 0,
+      dailyActiveUsers: uniqueActiveUsers,
+      expensesToday: expensesToday || 0,
+      totalExpenses: expenses.count || 0,
+      totalBudgets: budgets.count || 0,
+      totalFamilies: families.count || 0,
+      totalWorkspaces: workspaces.count || 0,
+      totalEmailsSent: emailsSent || 0,
+      totalEmailLogs: emailLogs.count || 0,
+      totalAIRequests: aiUsage.count || 0,
+      totalOCRRequests: ocrCache.count || 0,
+      serverStatus: health.status,
+      errorRate: health.api.failureRatePercentage,
+      uptimeSeconds: health.uptimeSeconds,
+    });
+  } catch (err: any) {
+    console.error('[ADMIN] Stats error:', err);
+    return res.status(500).json({ error: 'Failed to fetch admin stats' });
+  }
+});
+
+// GET /api/admin/users — Paginated user list with search/filter
+app.get('/api/admin/users', authenticateUser, requireAdmin, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+    const offset = (page - 1) * limit;
+    const search = (req.query.search as string || '').trim();
+    const country = (req.query.country as string || '').trim();
+    const dateFrom = req.query.dateFrom as string;
+    const dateTo = req.query.dateTo as string;
+
+    let query = supabaseAdmin.from('profiles').select('*', { count: 'exact' });
+
+    if (search) {
+      query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%`);
+    }
+    if (country) {
+      query = query.ilike('country', `%${country}%`);
+    }
+    if (dateFrom) {
+      query = query.gte('created_at', dateFrom);
+    }
+    if (dateTo) {
+      query = query.lte('created_at', dateTo);
+    }
+
+    const { data, count, error } = await query
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) throw error;
+    return res.status(200).json({ data, total: count || 0, page, limit });
+  } catch (err: any) {
+    console.error('[ADMIN] Users list error:', err);
+    return res.status(500).json({ error: 'Failed to fetch users' });
+  }
+});
+
+// GET /api/admin/users/:id — Full user detail
+app.get('/api/admin/users/:id', authenticateUser, requireAdmin, async (req, res) => {
+  const userId = String(req.params.id);
+  if (!isValidUuid(userId)) return res.status(400).json({ error: 'Invalid user ID' });
+
+  try {
+    // Log which user is being viewed
+    logAuditEvent({
+      userId: (req as any).user.id, entityType: 'admin_user_view', entityId: userId,
+      eventType: 'admin_viewed_user', req, newValue: { viewed_user_id: userId }
+    });
+
+    const [profile, expenses, budgets, categories, families, workspaces, notifications, aiHistory, ocrCache, auditLogs, emailLogs] = await Promise.all([
+      supabaseAdmin.from('profiles').select('*').eq('id', userId).single(),
+      supabaseAdmin.from('expenses').select('*, category:categories(name, icon, color)').eq('user_id', userId).order('created_at', { ascending: false }).limit(50),
+      supabaseAdmin.from('budgets').select('*, category:categories(name, icon, color)').eq('created_by', userId).order('created_at', { ascending: false }).limit(50),
+      supabaseAdmin.from('categories').select('*').eq('created_by', userId).order('name', { ascending: true }),
+      supabaseAdmin.from('family_members').select('*, family:families(*)').eq('profile_id', userId),
+      supabaseAdmin.from('workspace_members').select('*, workspace:workspaces(*)').eq('profile_id', userId),
+      supabaseAdmin.from('notifications').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(50),
+      supabaseAdmin.from('ai_chat_history').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(50),
+      supabaseAdmin.from('receipt_ocr_cache').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(50),
+      supabaseAdmin.from('audit_logs').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(100),
+      supabaseAdmin.from('email_logs').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(50),
+    ]);
+
+    if (profile.error) throw profile.error;
+
+    return res.status(200).json({
+      profile: profile.data,
+      expenses: expenses.data || [],
+      budgets: budgets.data || [],
+      categories: categories.data || [],
+      families: families.data || [],
+      workspaces: workspaces.data || [],
+      notifications: notifications.data || [],
+      aiHistory: aiHistory.data || [],
+      ocrCache: ocrCache.data || [],
+      auditLogs: auditLogs.data || [],
+      emailLogs: emailLogs.data || [],
+    });
+  } catch (err: any) {
+    console.error('[ADMIN] User detail error:', err);
+    return res.status(500).json({ error: 'Failed to fetch user details' });
+  }
+});
+
+// GET /api/admin/expenses — Platform-wide expenses
+app.get('/api/admin/expenses', authenticateUser, requireAdmin, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+    const offset = (page - 1) * limit;
+
+    const { data, count, error } = await supabaseAdmin
+      .from('expenses')
+      .select('*, category:categories(name, icon, color), profile:profiles(full_name, email)', { count: 'exact' })
+      .eq('is_deleted', false)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) throw error;
+    return res.status(200).json({ data, total: count || 0, page, limit });
+  } catch (err: any) {
+    console.error('[ADMIN] Expenses error:', err);
+    return res.status(500).json({ error: 'Failed to fetch expenses' });
+  }
+});
+
+// GET /api/admin/budgets — All budgets
+app.get('/api/admin/budgets', authenticateUser, requireAdmin, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+    const offset = (page - 1) * limit;
+
+    const { data, count, error } = await supabaseAdmin
+      .from('budgets')
+      .select('*, category:categories(name, icon, color)', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) throw error;
+    return res.status(200).json({ data, total: count || 0, page, limit });
+  } catch (err: any) {
+    console.error('[ADMIN] Budgets error:', err);
+    return res.status(500).json({ error: 'Failed to fetch budgets' });
+  }
+});
+
+// GET /api/admin/families — All families
+app.get('/api/admin/families', authenticateUser, requireAdmin, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+    const offset = (page - 1) * limit;
+
+    const { data, count, error } = await supabaseAdmin
+      .from('families')
+      .select('*, family_members(id, profile_id, member_role, profile:profiles(full_name, email))', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) throw error;
+    return res.status(200).json({ data, total: count || 0, page, limit });
+  } catch (err: any) {
+    console.error('[ADMIN] Families error:', err);
+    return res.status(500).json({ error: 'Failed to fetch families' });
+  }
+});
+
+// GET /api/admin/workspaces — All workspaces
+app.get('/api/admin/workspaces', authenticateUser, requireAdmin, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+    const offset = (page - 1) * limit;
+
+    const { data, count, error } = await supabaseAdmin
+      .from('workspaces')
+      .select('*, workspace_members(id, profile_id, member_role, profile:profiles(full_name, email))', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) throw error;
+    return res.status(200).json({ data, total: count || 0, page, limit });
+  } catch (err: any) {
+    console.error('[ADMIN] Workspaces error:', err);
+    return res.status(500).json({ error: 'Failed to fetch workspaces' });
+  }
+});
+
+// GET /api/admin/ai-usage — AI request logs
+app.get('/api/admin/ai-usage', authenticateUser, requireAdmin, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+    const offset = (page - 1) * limit;
+
+    const { data, count, error } = await supabaseAdmin
+      .from('ai_usage_logs')
+      .select('*, profile:profiles(full_name, email)', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) throw error;
+    return res.status(200).json({ data, total: count || 0, page, limit });
+  } catch (err: any) {
+    console.error('[ADMIN] AI usage error:', err);
+    return res.status(500).json({ error: 'Failed to fetch AI usage' });
+  }
+});
+
+// GET /api/admin/ocr-usage — Receipt OCR logs
+app.get('/api/admin/ocr-usage', authenticateUser, requireAdmin, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+    const offset = (page - 1) * limit;
+
+    const { data, count, error } = await supabaseAdmin
+      .from('receipt_ocr_cache')
+      .select('*, profile:profiles(full_name, email)', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) throw error;
+    return res.status(200).json({ data, total: count || 0, page, limit });
+  } catch (err: any) {
+    console.error('[ADMIN] OCR usage error:', err);
+    return res.status(500).json({ error: 'Failed to fetch OCR usage' });
+  }
+});
+
+// GET /api/admin/email-logs — Email delivery logs
+app.get('/api/admin/email-logs', authenticateUser, requireAdmin, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+    const offset = (page - 1) * limit;
+    const status = req.query.status as string;
+    const template = req.query.template as string;
+
+    let query = supabaseAdmin.from('email_logs').select('*', { count: 'exact' });
+    if (status) query = query.eq('status', status);
+    if (template) query = query.ilike('template_name', `%${template}%`);
+
+    const { data, count, error } = await query
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) throw error;
+    return res.status(200).json({ data, total: count || 0, page, limit });
+  } catch (err: any) {
+    console.error('[ADMIN] Email logs error:', err);
+    return res.status(500).json({ error: 'Failed to fetch email logs' });
+  }
+});
+
+// GET /api/admin/notifications — All notifications
+app.get('/api/admin/notifications', authenticateUser, requireAdmin, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+    const offset = (page - 1) * limit;
+
+    const { data, count, error } = await supabaseAdmin
+      .from('notifications')
+      .select('*, profile:profiles(full_name, email)', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) throw error;
+    return res.status(200).json({ data, total: count || 0, page, limit });
+  } catch (err: any) {
+    console.error('[ADMIN] Notifications error:', err);
+    return res.status(500).json({ error: 'Failed to fetch notifications' });
+  }
+});
+
+// GET /api/admin/audit-logs — Platform-wide audit trail
+app.get('/api/admin/audit-logs', authenticateUser, requireAdmin, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+    const offset = (page - 1) * limit;
+    const eventType = req.query.eventType as string;
+    const userId = req.query.userId as string;
+
+    let query = supabaseAdmin.from('audit_logs').select('*', { count: 'exact' });
+    if (eventType) query = query.eq('event_type', eventType);
+    if (userId && isValidUuid(userId)) query = query.eq('user_id', userId);
+
+    const { data, count, error } = await query
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) throw error;
+    return res.status(200).json({ data, total: count || 0, page, limit });
+  } catch (err: any) {
+    console.error('[ADMIN] Audit logs error:', err);
+    return res.status(500).json({ error: 'Failed to fetch audit logs' });
+  }
+});
+
+// GET /api/admin/analytics — Time-series analytics
+app.get('/api/admin/analytics', authenticateUser, requireAdmin, async (req, res) => {
+  try {
+    const days = Math.min(parseInt(req.query.days as string) || 30, 90);
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    const [signups, expensesData, aiData] = await Promise.all([
+      supabaseAdmin.from('profiles').select('created_at').gte('created_at', startDate.toISOString()).order('created_at', { ascending: true }),
+      supabaseAdmin.from('expenses').select('created_at, amount').gte('created_at', startDate.toISOString()).order('created_at', { ascending: true }),
+      supabaseAdmin.from('ai_usage_logs').select('created_at, total_tokens, estimated_cost').gte('created_at', startDate.toISOString()).order('created_at', { ascending: true }),
+    ]);
+
+    // Group by date helper
+    const groupByDate = (items: any[], dateField: string) => {
+      const groups: Record<string, number> = {};
+      (items || []).forEach(item => {
+        const date = new Date(item[dateField]).toISOString().split('T')[0];
+        groups[date] = (groups[date] || 0) + 1;
+      });
+      return Object.entries(groups).map(([date, count]) => ({ date, count }));
+    };
+
+    return res.status(200).json({
+      signupsPerDay: groupByDate(signups.data || [], 'created_at'),
+      expensesPerDay: groupByDate(expensesData.data || [], 'created_at'),
+      aiRequestsPerDay: groupByDate(aiData.data || [], 'created_at'),
+      totalSignups: signups.data?.length || 0,
+      totalExpensesInPeriod: expensesData.data?.length || 0,
+      totalAIRequestsInPeriod: aiData.data?.length || 0,
+    });
+  } catch (err: any) {
+    console.error('[ADMIN] Analytics error:', err);
+    return res.status(500).json({ error: 'Failed to fetch analytics' });
+  }
+});
+
+// GET /api/admin/system-health — Server health metrics
+app.get('/api/admin/system-health', authenticateUser, requireAdmin, async (req, res) => {
+  try {
+    const health = getPerformanceHealthStats();
+
+    // Test DB connection
+    let dbStatus = 'UP';
+    try {
+      const { error } = await supabaseAdmin.from('profiles').select('id').limit(1);
+      if (error) dbStatus = 'DEGRADED';
+    } catch {
+      dbStatus = 'DOWN';
+    }
+
+    return res.status(200).json({
+      ...health,
+      database: { status: dbStatus },
+    });
+  } catch (err: any) {
+    console.error('[ADMIN] System health error:', err);
+    return res.status(500).json({ error: 'Failed to fetch system health' });
   }
 });
 

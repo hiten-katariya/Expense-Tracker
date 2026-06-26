@@ -10,11 +10,16 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 }
 
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, label, error, hint, leftIcon, rightIcon, type, ...props }, ref) => {
+  ({ className, label, error, hint, leftIcon, rightIcon, type, id, ...props }, ref) => {
+    const generatedId = React.useId();
+    const inputId = id || generatedId;
+    const errorId = `${inputId}-error`;
+    const hintId = `${inputId}-hint`;
+
     return (
       <div className="w-full">
         {label && (
-          <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2 tracking-wide">
+          <label htmlFor={inputId} className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2 tracking-wide">
             {label}
           </label>
         )}
@@ -25,7 +30,11 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             </div>
           )}
           <input
+            id={inputId}
             type={type}
+            ref={ref}
+            aria-invalid={!!error}
+            aria-describedby={error ? errorId : hint ? hintId : undefined}
             className={cn(
               'w-full rounded-xl border bg-white dark:bg-bg-deep/40 px-4 py-3 text-sm text-slate-900 dark:text-white shadow-sm transition-all duration-300',
               'placeholder:text-slate-400 dark:placeholder:text-slate-600',
@@ -37,7 +46,6 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
               rightIcon && 'pr-11',
               className
             )}
-            ref={ref}
             {...props}
           />
           {rightIcon && (
@@ -46,8 +54,8 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             </div>
           )}
         </div>
-        {error && <p className="mt-2 text-xs font-medium text-red-400">{error}</p>}
-        {hint && !error && <p className="mt-2 text-xs text-slate-500">{hint}</p>}
+        {error && <p id={errorId} role="alert" className="mt-2 text-xs font-medium text-red-400">{error}</p>}
+        {hint && !error && <p id={hintId} className="mt-2 text-xs text-slate-500">{hint}</p>}
       </div>
     );
   }
@@ -63,15 +71,23 @@ interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
 }
 
 export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
-  ({ className, label, error, options, placeholder, ...props }, ref) => {
+  ({ className, label, error, options, placeholder, id, ...props }, ref) => {
+    const generatedId = React.useId();
+    const selectId = id || generatedId;
+    const errorId = `${selectId}-error`;
+
     return (
       <div className="w-full">
         {label && (
-          <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2 tracking-wide">
+          <label htmlFor={selectId} className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2 tracking-wide">
             {label}
           </label>
         )}
         <select
+          id={selectId}
+          ref={ref}
+          aria-invalid={!!error}
+          aria-describedby={error ? errorId : undefined}
           className={cn(
             'w-full rounded-xl border bg-white dark:bg-bg-deep/40 px-4 py-3 text-sm text-slate-900 dark:text-white shadow-sm transition-all duration-300',
             'focus:outline-none focus:ring-4 focus:ring-primary-500/10 focus:bg-slate-50 dark:focus:bg-bg-deep/60',
@@ -80,7 +96,6 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
               : 'border-slate-200 dark:border-white/10 focus:border-primary-500/70',
             className
           )}
-          ref={ref}
           {...props}
         >
           {placeholder && (
@@ -94,7 +109,7 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
             </option>
           ))}
         </select>
-        {error && <p className="mt-2 text-xs font-medium text-red-400">{error}</p>}
+        {error && <p id={errorId} role="alert" className="mt-2 text-xs font-medium text-red-400">{error}</p>}
       </div>
     );
   }
@@ -109,15 +124,24 @@ interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement
 }
 
 export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
-  ({ className, label, error, hint, ...props }, ref) => {
+  ({ className, label, error, hint, id, ...props }, ref) => {
+    const generatedId = React.useId();
+    const textareaId = id || generatedId;
+    const errorId = `${textareaId}-error`;
+    const hintId = `${textareaId}-hint`;
+
     return (
       <div className="w-full">
         {label && (
-          <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2 tracking-wide">
+          <label htmlFor={textareaId} className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2 tracking-wide">
             {label}
           </label>
         )}
         <textarea
+          id={textareaId}
+          ref={ref}
+          aria-invalid={!!error}
+          aria-describedby={error ? errorId : hint ? hintId : undefined}
           className={cn(
             'w-full rounded-xl border bg-white dark:bg-bg-deep/40 px-4 py-3 text-sm text-slate-900 dark:text-white shadow-sm transition-all duration-300 resize-none',
             'placeholder:text-slate-400 dark:placeholder:text-slate-600',
@@ -127,11 +151,10 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
               : 'border-slate-200 dark:border-white/10 focus:border-primary-500/70',
             className
           )}
-          ref={ref}
           {...props}
         />
-        {error && <p className="mt-2 text-xs font-medium text-red-400">{error}</p>}
-        {hint && !error && <p className="mt-2 text-xs text-slate-500">{hint}</p>}
+        {error && <p id={errorId} role="alert" className="mt-2 text-xs font-medium text-red-400">{error}</p>}
+        {hint && !error && <p id={hintId} className="mt-2 text-xs text-slate-500">{hint}</p>}
       </div>
     );
   }
@@ -145,23 +168,30 @@ interface CheckboxProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>
 }
 
 export const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
-  ({ className, label, error, ...props }, ref) => {
+  ({ className, label, error, id, ...props }, ref) => {
+    const generatedId = React.useId();
+    const checkboxId = id || generatedId;
+    const errorId = `${checkboxId}-error`;
+
     return (
       <div className="w-full">
-        <label className="flex items-center gap-3 cursor-pointer group">
+        <label htmlFor={checkboxId} className="flex items-center gap-3 cursor-pointer group select-none">
           <input
+            id={checkboxId}
             type="checkbox"
+            ref={ref}
+            aria-invalid={!!error}
+            aria-describedby={error ? errorId : undefined}
             className={cn(
               'h-5 w-5 rounded border-slate-200 dark:border-white/10 bg-white dark:bg-bg-deep/40 text-primary-500 focus:ring-primary-500/20 focus:ring-offset-0 focus:ring-4',
               'transition-all duration-300 cursor-pointer',
               className
             )}
-            ref={ref}
             {...props}
           />
           <span className="text-sm text-slate-600 dark:text-slate-300 group-hover:text-slate-800 dark:group-hover:text-white transition-colors duration-200">{label}</span>
         </label>
-        {error && <p className="mt-2 text-xs font-medium text-red-400">{error}</p>}
+        {error && <p id={errorId} role="alert" className="mt-2 text-xs font-medium text-red-400">{error}</p>}
       </div>
     );
   }
