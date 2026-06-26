@@ -152,7 +152,7 @@ export function ReportsPage() {
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(10);
       doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-      doc.text("EXPENSE TRACKER", 15, 20);
+      doc.text("EXPENSO", 15, 20);
 
       // Report Title
       doc.setFontSize(22);

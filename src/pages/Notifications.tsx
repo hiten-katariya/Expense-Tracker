@@ -30,6 +30,7 @@ import {
   ShieldAlert,
   Users
 } from 'lucide-react';
+import { NotificationSkeleton } from '@/components/Skeleton';
 import type { Notification } from '@/types';
 
 const ITEMS_PER_PAGE = 20;
@@ -380,16 +381,9 @@ export function NotificationsPage() {
       {/* Notifications List Container */}
       <Card>
         {isLoading ? (
-          <div className="p-6 space-y-4">
+          <div className="p-4 divide-y divide-foreground/5 animate-pulse">
             {[...Array(5)].map((_, i) => (
-              <div key={i} className="flex gap-4 p-4 border border-foreground/5 rounded-2xl animate-pulse">
-                <div className="h-5 w-5 bg-slate-200 rounded mt-1 shrink-0" />
-                <div className="h-10 bg-slate-200 rounded shrink-0 w-10" />
-                <div className="flex-1 space-y-2">
-                  <div className="h-4 bg-slate-200 rounded w-1/3" />
-                  <div className="h-3 bg-slate-200 rounded w-2/3" />
-                </div>
-              </div>
+              <NotificationSkeleton key={i} />
             ))}
           </div>
         ) : filteredNotifications.length > 0 ? (

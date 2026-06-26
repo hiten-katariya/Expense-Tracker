@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { TextReveal } from '@/components/ui/cascade-text';
 import { useAuthStore } from '@/stores/authStore';
@@ -23,8 +23,9 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import {
   Plus, ChevronLeft, ChevronRight, CreditCard as Edit2,
-  Trash2, Calendar, UploadCloud, Sparkles,
+  Trash2, Calendar, UploadCloud, Sparkles, Activity
 } from 'lucide-react';
+import { apiClient } from '@/api/client';
 import { PAYMENT_METHODS } from '@/types';
 import { SmartSearchBar } from '@/components/ai/SmartSearchBar';
 import { useReceiptOCR } from '@/hooks/useReceiptOCR';
@@ -72,6 +73,65 @@ export function ExpensesPage() {
   const restoreExpense = useRestoreExpense();
 
   const [expenseToDelete, setExpenseToDelete] = useState<Expense | null>(null);
+
+  // Audit Logs Modal states
+  const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [isAuditLoading, setIsAuditLoading] = useState(false);
+  const auditModalRef = useRef<HTMLDivElement>(null);
+
+  const fetchAuditLogs = async () => {
+    setIsAuditLoading(true);
+    try {
+      const response = await apiClient.get('/audit-logs');
+      setAuditLogs(response.data.data || []);
+    } catch (err) {
+      toast.error('Failed to fetch audit logs');
+    } finally {
+      setIsAuditLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isAuditModalOpen) {
+      fetchAuditLogs();
+    }
+  }, [isAuditModalOpen]);
+
+  // Focus trap for Audit Logs Modal
+  useEffect(() => {
+    if (!isAuditModalOpen) return;
+
+    const focusableElements = auditModalRef.current?.querySelectorAll(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    if (!focusableElements || focusableElements.length === 0) return;
+
+    const firstElement = focusableElements[0] as HTMLElement;
+    const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
+
+    const handleTab = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return;
+
+      if (e.shiftKey) {
+        if (document.activeElement === firstElement) {
+          lastElement.focus();
+          e.preventDefault();
+        }
+      } else {
+        if (document.activeElement === lastElement) {
+          firstElement.focus();
+          e.preventDefault();
+        }
+      }
+    };
+
+    firstElement.focus();
+    window.addEventListener('keydown', handleTab);
+    return () => {
+      window.removeEventListener('keydown', handleTab);
+    };
+  }, [isAuditModalOpen, auditLogs]);
 
   const confirmDelete = async () => {
     if (!expenseToDelete) return;
@@ -131,6 +191,13 @@ export function ExpensesPage() {
               Import CSV
             </Button>
           </Link>
+          <Button
+            variant="ghost"
+            leftIcon={<Activity className="h-4 w-4" />}
+            onClick={() => setIsAuditModalOpen(true)}
+          >
+            Audit Logs
+          </Button>
           <Link to="/trash">
             <Button variant="ghost" leftIcon={<Trash2 className="h-4 w-4" />}>
               Trash
@@ -286,6 +353,135 @@ export function ExpensesPage() {
         <div className="flex justify-end gap-3">
           <Button variant="secondary" onClick={() => setExpenseToDelete(null)}>Cancel</Button>
           <Button variant="danger" onClick={confirmDelete} isLoading={deleteExpense.isPending}>Move to Trash</Button>
+        </div>
+      </Modal>
+
+      {/* Compliance Audit Logs Modal */}
+      <Modal
+        isOpen={isAuditModalOpen}
+        onClose={() => setIsAuditModalOpen(false)}
+        title="Security & Compliance Audit Logs"
+        size="xl"
+      >
+        <div ref={auditModalRef} className="space-y-4 outline-none" tabIndex={-1}>
+          <p className="text-xs text-foreground/60 leading-relaxed mb-4">
+            Below is the read-only audit log history of security operations and data mutations linked to your profile. These logs are preserved for security audit trails.
+          </p>
+
+          {isAuditLoading ? (
+            <div className="flex flex-col items-center justify-center py-12 space-y-3">
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary-500 border-t-transparent" />
+              <span className="text-xs text-foreground/50 font-medium">Loading security logs...</span>
+            </div>
+          ) : auditLogs.length === 0 ? (
+            <div className="text-center py-12 text-foreground/45 text-sm">
+              No audit activities recorded.
+            </div>
+          ) : (
+            <div className="overflow-x-auto border border-foreground/10 rounded-2xl max-h-[50vh] scrollbar-thin">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-foreground/[0.02] border-b border-foreground/10">
+                    <th className="p-3 font-semibold text-foreground/60">Timestamp</th>
+                    <th className="p-3 font-semibold text-foreground/60">Operation</th>
+                    <th className="p-3 font-semibold text-foreground/60">Description</th>
+                    <th className="p-3 font-semibold text-foreground/60">Client Context</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-foreground/5">
+                  {auditLogs.map((log) => {
+                    let eventLabel = log.event_type;
+                    let badgeClass = "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20";
+                    let detailsText = "";
+
+                    if (log.event_type === 'expense_created') {
+                      eventLabel = 'Expense Created';
+                      badgeClass = 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20';
+                      detailsText = `Created expense "${log.new_value?.title || 'Expense'}": ₹${log.new_value?.amount || 0}`;
+                    } else if (log.event_type === 'expense_updated') {
+                      eventLabel = 'Expense Updated';
+                      badgeClass = 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20';
+                      const changes = [];
+                      if (log.old_value && log.new_value) {
+                        if (log.old_value.amount !== log.new_value.amount) {
+                          changes.push(`Amount: ₹${log.old_value.amount} ➔ ₹${log.new_value.amount}`);
+                        }
+                        if (log.old_value.title !== log.new_value.title) {
+                          changes.push(`Title: "${log.old_value.title}" ➔ "${log.new_value.title}"`);
+                        }
+                        if (log.old_value.is_deleted !== log.new_value.is_deleted) {
+                          changes.push(log.new_value.is_deleted ? 'Moved to trash' : 'Restored');
+                        }
+                      }
+                      detailsText = changes.length > 0 ? changes.join(', ') : 'Updated properties';
+                    } else if (log.event_type === 'expense_deleted') {
+                      eventLabel = 'Moved to Trash';
+                      badgeClass = 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20';
+                      detailsText = `Trashed "${log.old_value?.title || 'Expense'}": ₹${log.old_value?.amount || 0}`;
+                    } else if (log.event_type === 'expense_restored') {
+                      eventLabel = 'Expense Restored';
+                      badgeClass = 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20';
+                      detailsText = `Restored "${log.new_value?.title || 'Expense'}": ₹${log.new_value?.amount || 0}`;
+                    } else if (log.event_type === 'expense_permanently_deleted') {
+                      eventLabel = 'Permanently Deleted';
+                      badgeClass = 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20';
+                      detailsText = `Permanently deleted "${log.old_value?.title || 'Expense'}"`;
+                    } else if (log.event_type === 'budget_created') {
+                      eventLabel = 'Budget Created';
+                      badgeClass = 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20';
+                      detailsText = `Set budget limit to ₹${log.new_value?.amount || 0}`;
+                    } else if (log.event_type === 'budget_updated') {
+                      eventLabel = 'Budget Updated';
+                      badgeClass = 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20';
+                      if (log.old_value && log.new_value && log.old_value.amount !== log.new_value.amount) {
+                        detailsText = `Limit: ₹${log.old_value.amount} ➔ ₹${log.new_value.amount}`;
+                      } else {
+                        detailsText = 'Updated budget settings';
+                      }
+                    } else if (log.event_type === 'budget_deleted') {
+                      eventLabel = 'Budget Deleted';
+                      badgeClass = 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20';
+                      detailsText = `Removed budget: ₹${log.old_value?.amount || 0}`;
+                    } else if (log.event_type === 'profile_updated') {
+                      eventLabel = 'Security Action';
+                      badgeClass = 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20';
+                      detailsText = log.new_value?.action === 'gdpr_data_exported' ? 'GDPR Compliance Export Requested' : 'Profile Updated';
+                    }
+
+                    return (
+                      <tr key={log.id} className="hover:bg-foreground/[0.01]">
+                        <td className="p-3 whitespace-nowrap text-foreground/50">
+                          {new Date(log.created_at).toLocaleString('en-IN', {
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            second: '2-digit'
+                          })}
+                        </td>
+                        <td className="p-3 whitespace-nowrap">
+                          <span className={`inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full border ${badgeClass}`}>
+                            {eventLabel}
+                          </span>
+                        </td>
+                        <td className="p-3 font-medium text-foreground">{detailsText}</td>
+                        <td className="p-3 text-foreground/50 max-w-[180px] truncate" title={log.user_agent || ''}>
+                          {log.ip_address || '0.0.0.0'}
+                          <span className="block text-[10px] opacity-75 truncate">{log.user_agent || 'Browser'}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div className="flex justify-end pt-4">
+            <Button variant="secondary" onClick={() => setIsAuditModalOpen(false)}>
+              Close
+            </Button>
+          </div>
         </div>
       </Modal>
     </div>

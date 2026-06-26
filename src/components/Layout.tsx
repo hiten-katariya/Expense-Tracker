@@ -7,7 +7,7 @@ import { useUIStore } from '@/stores/uiStore';
 import { useNotifications, useFamilies } from '@/hooks/useQueries';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import { LayoutDashboard, Receipt, FolderOpen, Target, ChartPie as PieChart, Settings, Users, LogOut, Menu, X, Bell, Search, Sun, Moon, Trash2, Activity, Sparkles } from 'lucide-react';
+import { LayoutDashboard, Receipt, FolderOpen, Target, ChartPie as PieChart, Settings, Users, LogOut, Menu, X, Bell, Search, Sun, Moon, Trash2, Activity, Sparkles, Plus } from 'lucide-react';
 import { IconButton } from './Button';
 import { SafeAvatar } from './Avatar';
 import { AIChatPanel } from '@/components/ai/AIChatPanel';
@@ -18,6 +18,58 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = React.useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
   const [chatPanelOpen, setChatPanelOpen] = React.useState(false);
+
+  const drawerRef = React.useRef<HTMLDivElement>(null);
+
+  // Close drawer on Escape key press
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setMobileMenuOpen(false);
+      }
+    };
+    if (mobileMenuOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [mobileMenuOpen]);
+
+  // Focus trap for mobile navigation drawer
+  React.useEffect(() => {
+    if (!mobileMenuOpen) return;
+
+    const focusableElements = drawerRef.current?.querySelectorAll(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    if (!focusableElements || focusableElements.length === 0) return;
+
+    const firstElement = focusableElements[0] as HTMLElement;
+    const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
+
+    const handleTab = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return;
+
+      if (e.shiftKey) {
+        if (document.activeElement === firstElement) {
+          lastElement.focus();
+          e.preventDefault();
+        }
+      } else {
+        if (document.activeElement === lastElement) {
+          firstElement.focus();
+          e.preventDefault();
+        }
+      }
+    };
+
+    firstElement.focus();
+    window.addEventListener('keydown', handleTab);
+    return () => {
+      window.removeEventListener('keydown', handleTab);
+    };
+  }, [mobileMenuOpen]);
 
   const { data: notifications } = useNotifications(user?.id);
   const { data: families } = useFamilies(user?.id);
@@ -159,11 +211,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 exit={{ opacity: 0, x: -10 }}
                 className="flex items-center gap-2.5"
               >
-                <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white font-black text-xs shadow-lg shadow-primary-500/30">
-                  ET
+                <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-[#06B6D4] via-[#8B5CF6] to-[#EC4899] p-[1px] shadow-lg shadow-[#8B5CF6]/20">
+                  <div className="h-full w-full rounded-[7px] bg-bg-card dark:bg-card flex items-center justify-center text-white font-mono font-black text-[10px]">
+                    EX
+                  </div>
                 </div>
-                <span className="text-sm font-bold bg-gradient-to-r from-primary-600 to-secondary-600 dark:from-primary-400 dark:to-secondary-500 bg-clip-text text-transparent tracking-tight">
-                  Expense Tracker
+                <span className="text-sm font-mono tracking-[0.15em] font-black bg-gradient-to-r from-[#06B6D4] via-[#8B5CF6] to-[#EC4899] bg-clip-text text-transparent select-none">
+                  Expenso
                 </span>
               </motion.div>
             ) : (
@@ -172,9 +226,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.8 }}
-                className="h-7 w-7 rounded-lg bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white font-black text-xs shadow-lg shadow-primary-500/30"
+                className="h-7 w-7 rounded-lg bg-gradient-to-br from-[#06B6D4] via-[#8B5CF6] to-[#EC4899] p-[1px] shadow-lg shadow-[#8B5CF6]/20"
               >
-                ET
+                <div className="h-full w-full rounded-[7px] bg-bg-card dark:bg-card flex items-center justify-center text-white font-mono font-black text-[10px]">
+                  EX
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -294,8 +350,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <IconButton onClick={() => setMobileMenuOpen(true)} className="text-foreground/80">
           <Menu className="h-5 w-5" />
         </IconButton>
-        <span className="text-md font-bold bg-gradient-to-r from-primary-600 to-secondary-600 dark:from-primary-400 dark:to-secondary-500 bg-clip-text text-transparent">
-          Expense Tracker
+        <span className="text-md font-mono tracking-[0.15em] font-black bg-gradient-to-r from-[#06B6D4] via-[#8B5CF6] to-[#EC4899] bg-clip-text text-transparent">
+          Expenso
         </span>
         <div className="flex items-center gap-2">
           <IconButton 
@@ -336,21 +392,27 @@ export function Layout({ children }: { children: React.ReactNode }) {
               onClick={() => setMobileMenuOpen(false)}
             />
             <motion.aside
+              ref={drawerRef}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Sidebar Navigation"
+              tabIndex={-1}
               initial={{ x: '-100%' }}
               animate={{ x: 0 }}
               exit={{ x: '-100%' }}
               transition={{ type: 'tween', duration: 0.3 }}
-              className="lg:hidden fixed left-0 top-0 h-screen w-72 bg-card/95 backdrop-blur-2xl border-r border-foreground/10 z-50 flex flex-col select-none"
+              className="lg:hidden fixed left-0 top-0 h-screen w-72 bg-card/95 backdrop-blur-2xl border-r border-foreground/10 z-50 flex flex-col select-none focus:outline-none"
               data-lenis-prevent
             >
               <div className="h-16 flex items-center justify-between px-5 border-b border-foreground/5">
-                <span className="text-lg font-bold bg-gradient-to-r from-primary-400 to-secondary-500 bg-clip-text text-transparent">
-                  Expense Tracker
+                <span className="text-lg font-mono tracking-[0.15em] font-black bg-gradient-to-r from-[#06B6D4] via-[#8B5CF6] to-[#EC4899] bg-clip-text text-transparent">
+                  Expenso
                 </span>
                 <IconButton
                   onClick={() => setMobileMenuOpen(false)}
                   variant="ghost"
                   className="text-foreground/60 hover:text-foreground hover:bg-foreground/5"
+                  aria-label="Close menu"
                 >
                   <X className="h-5 w-5" />
                 </IconButton>
@@ -493,10 +555,74 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </header>
 
         {/* Page Area Wrapper */}
-        <div className="p-6 lg:p-8 flex-1 flex flex-col relative z-10 max-w-[1440px] w-full mx-auto">
+        <div className="p-6 pb-24 lg:pb-8 lg:p-8 flex-1 flex flex-col relative z-10 max-w-[1440px] w-full mx-auto">
           {children}
         </div>
       </main>
+
+      {/* Sticky Bottom Action Bar for Mobile view */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-card/90 backdrop-blur-xl border-t border-foreground/10 px-4 py-2 flex items-center justify-around shadow-[0_-5px_15px_rgba(0,0,0,0.05)] pb-safe">
+        <NavLink
+          to="/dashboard"
+          className={({ isActive }) =>
+            cn(
+              "flex flex-col items-center justify-center gap-0.5 text-[10px] font-semibold transition-colors duration-300 w-12 h-12 rounded-xl outline-none",
+              isActive ? "text-primary-600 dark:text-primary-400" : "text-foreground/50 hover:text-foreground"
+            )
+          }
+        >
+          <LayoutDashboard className="h-5 w-5" />
+          <span>Home</span>
+        </NavLink>
+
+        <NavLink
+          to="/expenses"
+          className={({ isActive }) =>
+            cn(
+              "flex flex-col items-center justify-center gap-0.5 text-[10px] font-semibold transition-colors duration-300 w-12 h-12 rounded-xl outline-none",
+              isActive ? "text-primary-600 dark:text-primary-400" : "text-foreground/50 hover:text-foreground"
+            )
+          }
+        >
+          <Receipt className="h-5 w-5" />
+          <span>Expenses</span>
+        </NavLink>
+
+        {/* Big central floating action button */}
+        <Link
+          to="/expenses/new"
+          className="flex items-center justify-center w-14 h-14 rounded-full bg-gradient-to-r from-primary-600 to-secondary-600 text-white shadow-lg shadow-primary-500/20 -translate-y-4 border-[6px] border-background hover:scale-105 active:scale-95 transition-all duration-200"
+          aria-label="Add New Expense"
+        >
+          <Plus className="h-6 w-6" />
+        </Link>
+
+        <NavLink
+          to="/budgets"
+          className={({ isActive }) =>
+            cn(
+              "flex flex-col items-center justify-center gap-0.5 text-[10px] font-semibold transition-colors duration-300 w-12 h-12 rounded-xl outline-none",
+              isActive ? "text-primary-600 dark:text-primary-400" : "text-foreground/50 hover:text-foreground"
+            )
+          }
+        >
+          <Target className="h-5 w-5" />
+          <span>Budgets</span>
+        </NavLink>
+
+        <NavLink
+          to="/settings"
+          className={({ isActive }) =>
+            cn(
+              "flex flex-col items-center justify-center gap-0.5 text-[10px] font-semibold transition-colors duration-300 w-12 h-12 rounded-xl outline-none",
+              isActive ? "text-primary-600 dark:text-primary-400" : "text-foreground/50 hover:text-foreground"
+            )
+          }
+        >
+          <Settings className="h-5 w-5" />
+          <span>Settings</span>
+        </NavLink>
+      </div>
 
       <AIChatPanel
         userId={user?.id}

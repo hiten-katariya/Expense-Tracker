@@ -283,8 +283,6 @@ export function FamilyDashboardPage() {
           subtitle={familyMonthlyBudget > 0 ? `${budgetUtilization.toFixed(0)}% Utilized` : 'Scoped to family'}
           icon={<Target className="h-5 w-5" />}
           gradient="bg-gradient-to-br from-indigo-500 to-blue-600"
-          trend={familyMonthlyBudget > 0 ? (budgetUtilization > 100 ? 'up' : 'down') : undefined}
-          trendValue={familyMonthlyBudget > 0 ? `${budgetUtilization.toFixed(0)}%` : undefined}
           delay={1}
         />
         <PremiumStatCard

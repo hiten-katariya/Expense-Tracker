@@ -1,7 +1,8 @@
 import React from 'react';
-import { Send, Sparkles, MessageSquare, X, Trash2, User, Loader2, ArrowRight } from 'lucide-react';
+import { Send, Sparkles, MessageSquare, X, Trash2, User, ArrowRight } from 'lucide-react';
 import { Button, IconButton } from '../Button';
 import { Input } from '../Input';
+import { AIChatSkeleton } from '../Skeleton';
 import { useAIChat } from '@/hooks/useAIChat';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
@@ -92,10 +93,7 @@ export function AIChatPanel({ userId, isOpen, onClose }: AIChatPanelProps) {
       {/* Messages Scroll Panel */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {isLoading ? (
-          <div className="h-full flex items-center justify-center text-foreground/50 space-y-2 flex-col">
-            <Loader2 className="h-8 w-8 text-primary-500 animate-spin" />
-            <p className="text-xs font-semibold">Loading conversation log...</p>
-          </div>
+          <AIChatSkeleton />
         ) : messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-4">
             <div className="h-14 w-14 rounded-2xl bg-primary-500/10 text-primary-500 flex items-center justify-center shadow-lg border border-primary-500/20">

@@ -8,10 +8,11 @@ import { Modal } from '@/components/Modal';
 import { Select } from '@/components/Input';
 import { formatDate, sanitizeName } from '@/lib/utils';
 import { useUIStore } from '@/stores/uiStore';
-import { Users, UserMinus, ShieldAlert, LogOut, Crown, Loader2 } from 'lucide-react';
+import { Users, UserMinus, ShieldAlert, LogOut, Crown } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { SafeAvatar } from '@/components/Avatar';
+import { FamilyMemberSkeleton } from '@/components/Skeleton';
 
 export function FamilyMembersPage() {
   const { user } = useAuthStore();
@@ -33,8 +34,19 @@ export function FamilyMembersPage() {
 
   if (familiesLoading || membersLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-primary-500" />
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <div className="h-8 w-48 bg-slate-200 dark:bg-white/5 animate-pulse rounded" />
+            <div className="h-4 w-64 bg-slate-200 dark:bg-white/5 animate-pulse rounded" />
+          </div>
+        </div>
+
+        <div className="bg-white/60 dark:bg-white/[0.02] rounded-2xl border border-foreground/10 p-6 space-y-4 animate-pulse">
+          {[...Array(3)].map((_, i) => (
+            <FamilyMemberSkeleton key={i} />
+          ))}
+        </div>
       </div>
     );
   }

@@ -132,7 +132,9 @@ function AppRoutes() {
         <div className="absolute inset-0 grid-bg opacity-[0.05] pointer-events-none" />
         <div className="text-center relative z-10">
           <div className="h-12 w-12 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4 shadow-[0_0_15px_rgba(99,102,241,0.25)]" />
-          <p className="text-foreground/65 font-semibold tracking-wide">Loading Expense Tracker...</p>
+          <p className="text-foreground/65 font-semibold tracking-wide flex items-center justify-center gap-1">
+            Loading <span className="font-mono tracking-[0.15em] font-black bg-gradient-to-r from-[#06B6D4] via-[#8B5CF6] to-[#EC4899] bg-clip-text text-transparent">Expenso</span>...
+          </p>
         </div>
       </div>
     );

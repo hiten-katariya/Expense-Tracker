@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
 import { useInView } from 'react-intersection-observer';
@@ -19,23 +19,26 @@ import {
   AlertTriangle,
   Mail,
   MapPin,
-  Phone,
-  Linkedin,
-  Github,
   Menu,
   X,
   ChevronRight,
   Play,
   Check,
-  HelpCircle,
-  Clock
+  Clock,
+  Lock,
+  Shield,
+  Layers,
+  Globe,
+  Award,
+  Key,
+  Star,
+  ChevronDown
 } from 'lucide-react';
 import { Button } from '@/components/Button';
 import { useAuthStore } from '@/stores/authStore';
 
-
 // Dynamic Counter Component for Statistics
-function Counter({ value, suffix = '', duration = 2 }: { value: number; suffix?: string; duration?: number }) {
+function Counter({ value, suffix = '', prefix = '', duration = 2 }: { value: number; suffix?: string; prefix?: string; duration?: number }) {
   const [count, setCount] = useState(0);
   const { ref, inView } = useInView({ triggerOnce: true, threshold: 0.1 });
 
@@ -62,8 +65,44 @@ function Counter({ value, suffix = '', duration = 2 }: { value: number; suffix?:
 
   return (
     <span ref={ref} className="font-extrabold tracking-tight">
-      {count.toLocaleString()}{suffix}
+      {prefix}{count.toLocaleString()}{suffix}
     </span>
+  );
+}
+
+// Interactive FAQ Accordion Component
+function FaqItem({ question, answer }: { question: string; answer: string }) {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <div className="border-b border-white/5 py-4">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between text-left py-2 text-sm sm:text-base font-bold text-white hover:text-primary-300 transition-colors focus:outline-none"
+      >
+        <span>{question}</span>
+        <motion.div
+          animate={{ rotate: isOpen ? 180 : 0 }}
+          transition={{ duration: 0.2 }}
+        >
+          <ChevronDown className="h-4 w-4 text-slate-400" />
+        </motion.div>
+      </button>
+      <AnimatePresence initial={false}>
+        {isOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25 }}
+            className="overflow-hidden"
+          >
+            <p className="text-xs sm:text-sm text-slate-400 leading-relaxed pt-2 pb-4">
+              {answer}
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
@@ -72,11 +111,13 @@ export function HomePage() {
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [isMouseOver, setIsMouseOver] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'desktop' | 'mobile' | 'analytics' | 'budget' | 'family'>('desktop');
+  
+  // Showcase tabs
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'expenses' | 'family' | 'workspace' | 'ai' | 'reports' | 'notifications' | 'budgets'>('dashboard');
   const [demoOpen, setDemoOpen] = useState(false);
 
-  // Scroll ref and transforms for frame-by-frame text narrative progression
-  const globalScrollRef = React.useRef<HTMLDivElement>(null);
+  // Scroll ref and transforms for hero
+  const globalScrollRef = useRef<HTMLDivElement>(null);
   const { scrollYProgress: globalProgress } = useScroll({
     target: globalScrollRef,
     offset: ['start start', 'end end'],
@@ -88,6 +129,13 @@ export function HomePage() {
   // Contact Form State
   const [contactForm, setContactForm] = useState({ name: '', email: '', subject: '', message: '' });
   const [formSubmitted, setFormSubmitted] = useState(false);
+
+  // AI Chat Simulation States
+  const [chatStep, setChatStep] = useState(0);
+  const [chatMessages, setChatMessages] = useState<Array<{ sender: 'user' | 'ai'; text: string }>>([
+    { sender: 'user', text: 'How much did I spend on food this month?' }
+  ]);
+  const [isTyping, setIsTyping] = useState(false);
 
   const handleMouseMove = (e: React.MouseEvent) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -106,11 +154,53 @@ export function HomePage() {
     }, 3000);
   };
 
+  // AI Chat dialogue scripts
+  const aiDialogue = useMemo(() => [
+    {
+      q: 'How much did I spend on food this month?',
+      a: 'You have spent **₹12,450.00** on Food & Dining. This is 15% lower than your average monthly spending.'
+    },
+    {
+      q: 'Show unusual expenses.',
+      a: 'Detected **2 anomalies**: a duplicate charge of **₹3,453.00** at Starbucks on June 26, and an unusual **₹8,500.00** SaaS billing on June 18.'
+    },
+    {
+      q: 'How can I save more?',
+      a: 'You currently have **3 inactive subscriptions** running. Canceling them could save you **₹1,640.00 per month**.'
+    }
+  ], []);
+
+  useEffect(() => {
+    if (chatStep === 0) {
+      setIsTyping(true);
+      const timer = setTimeout(() => {
+        setChatMessages(prev => [...prev, { sender: 'ai', text: aiDialogue[0].a }]);
+        setIsTyping(false);
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [chatStep, aiDialogue]);
+
+  const triggerChatStep = (idx: number) => {
+    if (isTyping) return;
+    setChatStep(idx);
+    setChatMessages([
+      { sender: 'user', text: aiDialogue[idx].q }
+    ]);
+    setIsTyping(true);
+    setTimeout(() => {
+      setChatMessages(prev => [...prev, { sender: 'ai', text: aiDialogue[idx].a }]);
+      setIsTyping(false);
+    }, 1500);
+  };
+
   // Nav items based on state
   const loggedOutNav = [
     { label: 'Home', href: '#home' },
     { label: 'Features', href: '#features' },
+    { label: 'Showcase', href: '#showcase' },
     { label: 'Pricing', href: '#pricing' },
+    { label: 'FAQ', href: '#faq' },
     { label: 'Contact', href: '#contact' },
   ];
 
@@ -123,99 +213,114 @@ export function HomePage() {
     { label: 'Settings', to: '/settings' },
   ];
 
-  // Alternating About sections lists
-  const aboutItems = [
-    {
-      title: 'Expense Tracking',
-      description: 'Record every purchase inside an elegant high-contrast interface. Sort by accounts, verify merchant structures, and group records with rich meta-tags.',
-      badge: 'Real-time Logs',
-      icon: Wallet,
-      color: 'from-indigo-500 to-purple-600',
-      stat: '99.9% Instant Sync'
-    },
-    {
-      title: 'Budget Planning',
-      description: 'Assign dynamic boundaries to specific categories. Receive warnings on your screen before crossing thresholds, protecting family financial goals.',
-      badge: 'Visual Safeguards',
-      icon: Target,
-      color: 'from-cyan-500 to-blue-600',
-      stat: '15% Average Monthly Savings'
-    },
-    {
-      title: 'Family Expense Management',
-      description: 'Invite family members to join a shared wallet ecosystem. Delegate spending caps to children and review combined logs in a synchronized profile feed.',
-      badge: 'Collaborative Wallets',
-      icon: Users,
-      color: 'from-pink-500 to-rose-600',
-      stat: 'Up to 5 Synchronized Members'
-    },
-    {
-      title: 'AI Powered Categorization',
-      description: 'Let machine learning match standard transactions to target categories automatically. Smart tagging improves over time based on your edits.',
-      badge: 'Intelligent Matching',
-      icon: Sparkles,
-      color: 'from-purple-500 to-pink-500',
-      stat: '98% Tagging Accuracy'
-    },
-    {
-      title: 'Reports & Analytics',
-      description: 'Unlock structured breakdowns of month-over-month trends. Inspect interactive spending charts and export reports with single-click configurations.',
-      badge: 'SaaS Audits',
-      icon: PieChart,
-      color: 'from-teal-500 to-emerald-600',
-      stat: 'PDF & CSV Exporting Enabled'
-    }
-  ];
-
-  // Features list
+  // 9 Premium Feature Cards definitions
   const featuresList = [
     {
-      title: 'Smart Expense Tracking',
-      desc: 'Seamlessly capture currency outflows with absolute precision.',
-      icon: Wallet,
-      gradient: 'from-indigo-500/20 to-purple-500/10'
-    },
-    {
-      title: 'AI Categorization',
-      desc: 'Smart algorithms match vendors and tag purchases on autopilot.',
+      title: 'AI Expense Categorization',
+      desc: 'Smart machine learning models automatically verify vendors and assign accurate category tags to purchases.',
       icon: Sparkles,
-      gradient: 'from-purple-500/20 to-pink-500/10'
+      gradient: 'from-purple-500/20 to-pink-500/10',
+      preview: (
+        <div className="flex items-center gap-2 p-2.5 bg-white/5 rounded-xl border border-white/5 mt-4">
+          <div className="h-6 w-6 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-400"><Sparkles className="h-3.5 w-3.5" /></div>
+          <span className="text-[10px] text-slate-300">Swiggy Order → Food</span>
+        </div>
+      )
     },
     {
-      title: 'OCR Receipt Scanner',
-      desc: 'Take photos of invoice receipts and let AI extract cost numbers.',
+      title: 'Receipt OCR Scanner',
+      desc: 'Take snapshots of receipt invoices and let AI extract text, merchant, and total numbers in seconds.',
       icon: ScanLine,
-      gradient: 'from-cyan-500/20 to-blue-500/10'
+      gradient: 'from-cyan-500/20 to-blue-500/10',
+      preview: (
+        <div className="flex items-center gap-2 p-2.5 bg-white/5 rounded-xl border border-white/5 mt-4">
+          <div className="h-6 w-6 rounded-lg bg-cyan-500/10 flex items-center justify-center text-cyan-400"><ScanLine className="h-3.5 w-3.5" /></div>
+          <span className="text-[10px] text-slate-300">Extracting Invoice... 99.4% confidence</span>
+        </div>
+      )
     },
     {
-      title: 'Budget Alerts',
-      desc: 'Receive alerts when you approach monthly spending margins.',
-      icon: AlertTriangle,
-      gradient: 'from-amber-500/20 to-orange-500/10'
+      title: 'Budget Tracking',
+      desc: 'Define custom budget boundaries per category to receive live progress alerts before crossing safety margins.',
+      icon: Target,
+      gradient: 'from-amber-500/20 to-orange-500/10',
+      preview: (
+        <div className="space-y-1.5 mt-4 w-full">
+          <div className="flex justify-between text-[9px] text-slate-400"><span>Rent limit</span><span>85% Utilized</span></div>
+          <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden"><div className="h-full bg-orange-500" style={{ width: '85%' }} /></div>
+        </div>
+      )
     },
     {
-      title: 'Family Accounts',
-      desc: 'Co-manage combined household budgets under a single group.',
+      title: 'Family Finance Hub',
+      desc: 'Invite members to share budget plans, assign spending caps to children, and view total logs.',
       icon: Users,
-      gradient: 'from-pink-500/20 to-rose-500/10'
+      gradient: 'from-pink-500/20 to-rose-500/10',
+      preview: (
+        <div className="flex items-center gap-1.5 mt-4">
+          <div className="h-5 w-5 rounded-full bg-indigo-500 flex items-center justify-center text-[8px] text-white">A</div>
+          <div className="h-5 w-5 rounded-full bg-pink-500 flex items-center justify-center text-[8px] text-white">S</div>
+          <span className="text-[9px] text-slate-400">+3 members active</span>
+        </div>
+      )
     },
     {
-      title: 'Analytics Dashboard',
-      desc: 'Trace spending metrics and financial indices with responsive graphs.',
+      title: 'Workspace Collaboration',
+      desc: 'Separate personal budgets from business operations under independent domains and permission parameters.',
+      icon: Activity,
+      gradient: 'from-teal-500/20 to-emerald-500/10',
+      preview: (
+        <div className="flex items-center gap-2 p-2 bg-white/5 rounded-xl border border-white/5 mt-4">
+          <span className="text-[9px] text-slate-300">Workspace: Engineering Dept</span>
+        </div>
+      )
+    },
+    {
+      title: 'Recurring Expenses',
+      desc: 'Track software subscriptions, utility bills, and insurance fees with automatic billing cycles.',
+      icon: Clock,
+      gradient: 'from-blue-500/20 to-indigo-500/10',
+      preview: (
+        <div className="flex justify-between items-center bg-white/5 p-2 rounded-xl border border-white/5 mt-4">
+          <span className="text-[9px] text-slate-400">Spotify (Family)</span>
+          <span className="text-[9px] text-slate-300">₹179/mo</span>
+        </div>
+      )
+    },
+    {
+      title: 'Fraud & Spike Detection',
+      desc: 'Let our system scan audit logs to automatically flag duplicate transactions and unusual spikes.',
+      icon: AlertTriangle,
+      gradient: 'from-rose-500/20 to-red-500/10',
+      preview: (
+        <div className="flex items-center gap-1.5 text-red-400 mt-4 bg-red-500/10 border border-red-500/20 p-2.5 rounded-xl">
+          <AlertTriangle className="h-3.5 w-3.5" />
+          <span className="text-[9px]">Flagged: Duplicate billing</span>
+        </div>
+      )
+    },
+    {
+      title: 'Monthly AI Insights',
+      desc: 'Receive tailored spending suggestions calculated from month-over-month ledger averages.',
       icon: PieChart,
-      gradient: 'from-teal-500/20 to-emerald-500/10'
+      gradient: 'from-indigo-500/20 to-cyan-500/10',
+      preview: (
+        <div className="flex items-center gap-2 p-2 bg-white/5 rounded-xl border border-white/5 mt-4">
+          <span className="text-[9px] text-slate-400">Reduce subscriptions to save ₹1.6k</span>
+        </div>
+      )
     },
     {
-      title: 'Export Reports',
-      desc: 'Generate audited accounting reports optimized for tax filing.',
-      icon: FileText,
-      gradient: 'from-blue-500/20 to-indigo-500/10'
-    },
-    {
-      title: 'Notifications',
-      desc: 'Immediate system alerts about updates, budgets, and family cards.',
-      icon: Bell,
-      gradient: 'from-indigo-500/20 to-cyan-500/10'
+      title: 'Secure Cloud Sync',
+      desc: 'Your data is encrypted end-to-end and stored safely with row level security on Supabase.',
+      icon: CheckCircle2,
+      gradient: 'from-teal-500/20 to-indigo-500/10',
+      preview: (
+        <div className="flex items-center gap-1.5 text-emerald-400 mt-4 bg-emerald-500/10 border border-emerald-500/20 p-2.5 rounded-xl">
+          <CheckCircle2 className="h-3.5 w-3.5" />
+          <span className="text-[9px]">AES-256 Encrypted</span>
+        </div>
+      )
     }
   ];
 
@@ -237,7 +342,7 @@ export function HomePage() {
         <div className="absolute top-[40%] left-[25%] h-[600px] w-[600px] rounded-full bg-gradient-to-tr from-accent-pink to-primary-600 opacity-[0.12] blur-[120px] blob-animate-3" />
         
         {/* Star Particle Matrix */}
-        {[...Array(20)].map((_, i) => (
+        {[...Array(25)].map((_, i) => (
           <motion.div
             key={i}
             className="absolute rounded-full bg-white/20 pointer-events-none"
@@ -276,19 +381,18 @@ export function HomePage() {
       <header className="sticky top-0 z-50 w-full h-20 flex items-center justify-between px-6 sm:px-8 lg:px-12 border-b border-white/5 bg-bg-dark/60 backdrop-blur-xl">
         <div className="mx-auto max-w-[1440px] w-full flex items-center justify-between">
           <div className="flex items-center gap-2 select-none">
-            <div className="h-9 w-9 rounded-xl bg-gradient-to-tr from-primary-500 via-primary-600 to-secondary-500 p-[1.5px] shadow-[0_0_15px_rgba(99,102,241,0.35)]">
-              <div className="h-full w-full rounded-[10px] bg-bg-card flex items-center justify-center text-white font-extrabold text-sm border border-black/10">
-                ET
+            <div className="h-9 w-9 rounded-xl bg-gradient-to-tr from-[#06B6D4] via-[#8B5CF6] to-[#EC4899] p-[1.5px] shadow-[0_0_15px_rgba(139,92,246,0.35)]">
+              <div className="h-full w-full rounded-[10px] bg-bg-card flex items-center justify-center text-white font-mono font-black text-xs border border-black/10">
+                EX
               </div>
             </div>
-            <span className="text-lg font-black bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent tracking-tight">
-              Expense Tracker
+            <span className="text-lg font-mono tracking-[0.15em] font-black bg-gradient-to-r from-[#06B6D4] via-[#8B5CF6] to-[#EC4899] bg-clip-text text-transparent">
+              Expenso
             </span>
           </div>
 
           {/* Desktop Navigation Links */}
           <nav className="hidden md:flex items-center gap-8">
-            {/* If NOT logged in, show marketing links */}
             {!user ? (
               <>
                 {loggedOutNav.map((item) => (
@@ -311,7 +415,6 @@ export function HomePage() {
                 </Link>
               </>
             ) : (
-              // If logged in, show app internal navigation links
               <>
                 {loggedInNav.map((item) => (
                   <Link
@@ -408,13 +511,10 @@ export function HomePage() {
 
       {/* Global Scroll Container for Sticky Canvas & Sections */}
       <div ref={globalScrollRef} className="relative w-full">
-
-
-        {/* Narrative & Marketing Content */}
         <div className="relative z-10">
           
           {/* Hero Section */}
-          <section className="min-h-screen w-full max-w-[1440px] mx-auto px-6 sm:px-8 lg:px-12 grid grid-cols-1 md:grid-cols-2 items-center relative bg-transparent">
+          <section className="min-h-screen w-full max-w-[1440px] mx-auto px-6 sm:px-8 lg:px-12 grid grid-cols-1 md:grid-cols-2 items-center relative bg-transparent gap-12">
             <motion.div 
               style={{ opacity: heroOpacity, y: heroY }} 
               className="space-y-8 max-w-xl pointer-events-auto select-text py-20"
@@ -455,296 +555,182 @@ export function HomePage() {
                 </button>
               </div>
 
-              {/* High level features check */}
-              <div className="grid gap-4 sm:grid-cols-3">
+              {/* Hero Statistics Row (counters animate when visible) */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-6 border-t border-white/5">
                 {[
-                  { title: 'Zero Data Leaks', desc: 'Secure local & cloud encryption' },
-                  { title: 'Shared Wallets', desc: 'Sync spendings with spouses' },
-                  { title: 'AI Automation', desc: 'Tag purchases instantly' },
-                ].map((item) => (
-                  <div
-                    key={item.title}
-                    className="rounded-2xl border border-white/5 bg-white/[0.01] p-5 text-left backdrop-blur hover:border-white/10 transition-colors duration-300"
-                  >
-                    <CheckCircle2 className="mb-2 h-5 w-5 text-secondary-500" />
-                    <p className="font-semibold text-sm text-white">{item.title}</p>
-                    <p className="text-xs text-slate-500 mt-1">{item.desc}</p>
+                  { value: 50000, suffix: '+', title: 'Expenses Tracked', desc: 'Logged securely' },
+                  { value: 100, suffix: 'M+', prefix: '₹', title: 'Assets Managed', desc: 'Syncing globally' },
+                  { value: 98, suffix: '%', title: 'AI Accuracy', desc: 'Smart categorization' },
+                  { value: 10000, suffix: '+', title: 'Active Users', desc: 'Trusting Expenso' },
+                  { value: 99.9, suffix: '%', title: 'System Uptime', desc: 'SOC2 Ready' },
+                ].map((item, idx) => (
+                  <div key={idx} className="space-y-1.5 bg-white/[0.01] border border-white/5 rounded-2xl p-4 shadow-glass hover:border-white/10 transition-colors">
+                    <div className="text-xl sm:text-2xl font-black bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent">
+                      {item.prefix}<Counter value={item.value} suffix={item.suffix} />
+                    </div>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{item.title}</p>
+                    <p className="text-[8px] text-slate-600 mt-0.5">{item.desc}</p>
                   </div>
                 ))}
               </div>
             </motion.div>
-            <div className="hidden md:block" />
-          </section>
 
-          {/* INTERACTIVE HUB MOCKUP SECTION */}
-          <section className="relative z-10 py-24 border-t border-white/5 bg-transparent">
-            <div className="mx-auto max-w-[1440px] px-6 sm:px-8 lg:px-12 w-full grid gap-16 lg:grid-cols-[1fr_1fr] items-center">
-              <div className="space-y-6">
-                <span className="text-xs uppercase font-extrabold tracking-[0.2em] text-primary-400">Interactive Hub</span>
-                <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight leading-[1.2]">
-                  Trace Your Ledger with Live Visual Mockups
-                </h2>
-                <p className="text-slate-400 text-sm sm:text-base leading-relaxed">
-                  Verify how transaction records immediately adjust category budgets, trigger warnings, and maintain synchronization coordinates across active family groups in real-time.
-                </p>
-                <div className="grid gap-3.5 text-slate-300 text-xs font-semibold">
-                  <div className="flex items-center gap-2">
-                    <Check className="h-4.5 w-4.5 text-emerald-400" />
-                    <span>Real-time balance feeds and income sync</span>
+            {/* Right-side glowing graphic mockup */}
+            <div className="hidden md:flex items-center justify-center relative h-[600px] select-none pointer-events-none">
+              <div className="absolute h-[350px] w-[350px] rounded-full bg-gradient-to-tr from-primary-500/20 to-secondary-500/30 blur-[90px] animate-pulse" />
+
+              {/* Main floating glass dashboard card */}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9, y: 30 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ duration: 0.8, delay: 0.2 }}
+                className="w-[420px] rounded-3xl border border-white/10 bg-white/[0.02] backdrop-blur-2xl p-6 shadow-[0_30px_70px_rgba(0,0,0,0.5)] relative overflow-hidden"
+              >
+                <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-primary-500 via-secondary-500 to-accent-pink" />
+                
+                {/* Header */}
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-red-500/80" />
+                    <span className="h-2 w-2 rounded-full bg-yellow-500/80" />
+                    <span className="h-2 w-2 rounded-full bg-green-500/80" />
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Check className="h-4.5 w-4.5 text-emerald-400" />
-                    <span>Live category budget status warning indicators</span>
-                  </div>
+                  <span className="text-[9px] text-slate-400 font-extrabold tracking-wider uppercase bg-white/5 border border-white/5 px-2.5 py-1 rounded-full">
+                    SaaS Analytics
+                  </span>
                 </div>
-              </div>
 
-              <div className="flex justify-center">
-                {/* Live Interactive Wallet Mockup */}
-                <div className="w-full max-w-[420px] glass-card border border-white/10 p-6 shadow-[0_20px_50px_rgba(0,0,0,0.5)] relative overflow-hidden group select-none">
-                  {/* Card top gradient indicator */}
-                  <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-primary-500 via-secondary-500 to-accent-pink" />
-
-                  <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center gap-1.5">
-                      <div className="h-3 w-3 rounded-full bg-red-500/80" />
-                      <div className="h-3 w-3 rounded-full bg-amber-500/80" />
-                      <div className="h-3 w-3 rounded-full bg-emerald-500/80" />
-                    </div>
-                    <div className="text-[10px] text-slate-500 tracking-wider uppercase font-bold flex items-center gap-1">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" />
-                      Live Preview
-                    </div>
+                {/* Graph mockup & main balance */}
+                <div className="space-y-6">
+                  <div>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Family Assets Overview</span>
+                    <span className="text-3xl font-black text-white mt-1 block">₹1,48,920.00</span>
                   </div>
 
-                  <div className="space-y-6">
-                    <div>
-                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Wallet Balance</span>
-                      <div className="flex items-baseline gap-1 mt-1">
-                        <span className="text-3xl font-extrabold text-white">₹78,430.00</span>
-                        <span className="text-xs text-emerald-400 font-semibold flex items-center">↑ 12%</span>
-                      </div>
+                  {/* Sparkline chart visualization */}
+                  <div className="space-y-3">
+                    <div className="flex justify-between text-xs font-semibold text-slate-400">
+                      <span>Monthly Spending Trend</span>
+                      <span className="text-emerald-400">₹45,210.00 Spent</span>
                     </div>
-
-                    {/* Progress Ring / Bar */}
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-xs font-semibold">
-                        <span className="text-slate-400">Monthly Budget (Food & Dining)</span>
-                        <span className="text-slate-200">₹8,400 / ₹12,000</span>
-                      </div>
-                      <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden border border-white/5">
-                        <motion.div
-                          className="h-full bg-gradient-to-r from-primary-500 to-secondary-500"
-                          initial={{ width: 0 }}
-                          whileInView={{ width: '70%' }}
-                          viewport={{ once: true }}
-                          transition={{ duration: 1.5, delay: 0.2 }}
+                    {/* Simulated SVG line chart */}
+                    <div className="h-28 w-full bg-white/5 rounded-2xl p-3 border border-white/5 flex items-end">
+                      <svg className="w-full h-full overflow-visible" viewBox="0 0 100 40">
+                        <defs>
+                          <linearGradient id="glowGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#8B5CF6" stopOpacity="0.4" />
+                            <stop offset="100%" stopColor="#8B5CF6" stopOpacity="0.0" />
+                          </linearGradient>
+                        </defs>
+                        <path
+                          d="M0,40 Q15,10 30,25 T60,5 T90,20 T100,12 L100,40 L0,40 Z"
+                          fill="url(#glowGrad)"
                         />
+                        <motion.path
+                          d="M0,40 Q15,10 30,25 T60,5 T90,20 T100,12"
+                          fill="none"
+                          stroke="url(#lineGrad)"
+                          strokeWidth="2"
+                          initial={{ pathLength: 0 }}
+                          animate={{ pathLength: 1 }}
+                          transition={{ duration: 1.5, delay: 0.5 }}
+                        />
+                        <linearGradient id="lineGrad" x1="0" y1="0" x2="1" y2="0">
+                          <stop offset="0%" stopColor="#6366F1" />
+                          <stop offset="50%" stopColor="#EC4899" />
+                          <stop offset="100%" stopColor="#06B6D4" />
+                        </linearGradient>
+                      </svg>
+                    </div>
+                  </div>
+
+                  {/* Indicators */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-white/5 border border-white/5 rounded-2xl p-4">
+                      <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Savings Target</span>
+                      <span className="text-sm font-bold text-slate-200 mt-1 block">82% Achieved</span>
+                      <div className="h-1.5 w-full bg-white/10 rounded-full mt-2 overflow-hidden">
+                        <div className="h-full bg-indigo-500 rounded-full" style={{ width: '82%' }} />
                       </div>
                     </div>
-
-                    <div className="h-[1px] bg-white/5" />
-
-                    {/* Recent Items Mockup */}
-                    <div className="space-y-3">
-                      <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Transactions Feed</span>
-                      
-                      {[
-                        { label: 'Weekly Groceries', amount: '-₹4,230.00', time: 'Just now', icon: Wallet, tag: 'Groceries' },
-                        { label: 'SaaS Cloud Hosting', amount: '-₹1,640.00', time: '2 hours ago', icon: FileText, tag: 'Bills' },
-                        { label: 'Salary Credit', amount: '+₹90,000.00', time: 'Yesterday', icon: TrendingUp, tag: 'Income', isIncome: true }
-                      ].map((tx, idx) => (
-                        <div key={idx} className="flex items-center gap-3 p-2 rounded-xl hover:bg-white/[0.02] transition-colors duration-200">
-                          <div className={`h-8 w-8 rounded-lg flex items-center justify-center border ${tx.isIncome ? 'bg-emerald-500/10 border-emerald-500/15 text-emerald-400' : 'bg-white/5 border-white/5 text-primary-400'}`}>
-                            <tx.icon className="h-4.5 w-4.5" />
-                          </div>
-                          <div className="flex-grow">
-                            <span className="text-xs font-semibold text-white block">{tx.label}</span>
-                            <span className="text-[9px] text-slate-500 uppercase font-semibold">{tx.tag}</span>
-                          </div>
-                          <div className="text-right">
-                            <span className={`text-xs font-bold ${tx.isIncome ? 'text-emerald-400' : 'text-slate-200'}`}>
-                              {tx.amount}
-                            </span>
-                            <span className="text-[9px] text-slate-500 block">{tx.time}</span>
-                          </div>
-                        </div>
-                      ))}
+                    <div className="bg-white/5 border border-white/5 rounded-2xl p-4">
+                      <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Daily Average</span>
+                      <span className="text-sm font-bold text-slate-200 mt-1 block">₹1,540.00</span>
+                      <span className="text-[9px] text-emerald-400 font-semibold mt-1 block">↓ 8% vs last week</span>
                     </div>
                   </div>
                 </div>
-              </div>
+              </motion.div>
+
+              {/* Smaller floating card: Recent transaction */}
+              <motion.div
+                animate={{ y: [-6, 6, -6] }}
+                transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+                className="absolute top-10 -left-6 w-56 rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-2xl p-4 shadow-[0_15px_35px_rgba(0,0,0,0.3)]"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="h-8 w-8 rounded-xl bg-purple-500/10 border border-purple-500/15 text-purple-400 flex items-center justify-center flex-shrink-0">
+                    <Sparkles className="h-4.5 w-4.5" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-[10px] font-bold text-white block truncate">AI Categorized</span>
+                    <span className="text-[8px] text-slate-400 block truncate">Uber Ride → Travel</span>
+                  </div>
+                  <span className="text-[10px] font-bold text-emerald-400 ml-auto shrink-0">+₹240 saved</span>
+                </div>
+              </motion.div>
+
+              {/* Smaller floating card: Notification / Warning */}
+              <motion.div
+                animate={{ y: [6, -6, 6] }}
+                transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut' }}
+                className="absolute bottom-10 -right-6 w-56 rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-2xl p-4 shadow-[0_15px_35px_rgba(0,0,0,0.3)]"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="h-8 w-8 rounded-xl bg-amber-500/10 border border-amber-500/15 text-amber-400 flex items-center justify-center flex-shrink-0">
+                    <Target className="h-4.5 w-4.5" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-white block">Safe Budget Cap</span>
+                    <span className="text-[8px] text-slate-400 block">Shopping at 65% limit</span>
+                  </div>
+                </div>
+              </motion.div>
             </div>
           </section>
 
-          {/* ABOUT / STORYTELLING SECTION */}
-          <section className="relative z-10 py-24 border-t border-white/5 bg-transparent" id="about">
-            <div className="mx-auto max-w-[1440px] px-6 sm:px-8 lg:px-12 w-full">
-              <div className="text-center max-w-2xl mx-auto mb-20 space-y-4">
-                <h2 className="text-xs uppercase font-extrabold tracking-[0.2em] text-secondary-500">How It Works</h2>
-                <p className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-                  A Premium Ecosystem Engineered for Financial Health
-                </p>
-                <p className="text-slate-400 text-sm sm:text-base leading-relaxed">
-                  Unlock a modern storytelling experience mapping cash tracking, budget parameters, and household logs into unified workflows.
-                </p>
-              </div>
-
-              <div className="space-y-32">
-                {aboutItems.map((item, index) => {
-                  const isEven = index % 2 === 0;
-                  return (
-                    <div
-                      key={item.title}
-                      className="grid gap-12 lg:grid-cols-2 items-center"
-                    >
-                      {/* Left Column (Alternating placement) */}
-                      <motion.div
-                        initial={{ opacity: 0, x: isEven ? -40 : 40 }}
-                        whileInView={{ opacity: 1, x: 0 }}
-                        viewport={{ once: true, margin: '-100px' }}
-                        transition={{ duration: 0.8 }}
-                        className={isEven ? 'lg:order-1' : 'lg:order-2'}
-                      >
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-white/5 border border-white/10 text-slate-300 mb-4">
-                          {item.badge}
-                        </span>
-                        <h3 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight mb-4">
-                          {item.title}
-                        </h3>
-                        <p className="text-slate-400 text-sm sm:text-base leading-relaxed mb-6">
-                          {item.description}
-                        </p>
-                        <div className="h-[1px] bg-white/10 w-full mb-6" />
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/10">
-                            <Check className="h-4.5 w-4.5" />
-                          </div>
-                          <span className="text-xs font-semibold text-slate-300">{item.stat}</span>
-                        </div>
-                      </motion.div>
-
-                      {/* Right Column: Visual Component */}
-                      <motion.div
-                        initial={{ opacity: 0, x: isEven ? 40 : -40 }}
-                        whileInView={{ opacity: 1, x: 0 }}
-                        viewport={{ once: true, margin: '-100px' }}
-                        transition={{ duration: 0.8 }}
-                        className={isEven ? 'lg:order-2 flex justify-center' : 'lg:order-1 flex justify-center'}
-                      >
-                        <div className="w-full max-w-[460px] p-6 rounded-3xl bg-bg-card/30 border border-white/5 relative overflow-hidden shadow-xl select-none group">
-                          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-36 w-36 rounded-full bg-primary-500/10 blur-[80px] pointer-events-none" />
-                          
-                          {/* Alternating Mockup Designs */}
-                          {index === 0 && (
-                            <div className="space-y-4">
-                              <div className="flex items-center justify-between bg-white/5 border border-white/5 p-4 rounded-2xl">
-                                <div className="flex items-center gap-3">
-                                  <div className="h-9 w-9 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 flex items-center justify-center">
-                                    <Wallet className="h-5 w-5" />
-                                  </div>
-                                  <div>
-                                    <span className="text-xs font-bold text-white block">Starbucks Premium</span>
-                                    <span className="text-[9px] text-slate-500 block uppercase font-semibold">Coffee Shop</span>
-                                  </div>
-                                </div>
-                                <span className="text-xs font-bold text-slate-300">-₹380.00</span>
-                              </div>
-                              <div className="flex items-center justify-between bg-white/5 border border-white/5 p-4 rounded-2xl">
-                                <div className="flex items-center gap-3">
-                                  <div className="h-9 w-9 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20 flex items-center justify-center">
-                                    <Activity className="h-5 w-5" />
-                                  </div>
-                                  <div>
-                                    <span className="text-xs font-bold text-white block">Fitness Gym Membership</span>
-                                    <span className="text-[9px] text-slate-500 block uppercase font-semibold">Health & Gym</span>
-                                  </div>
-                                </div>
-                                <span className="text-xs font-bold text-slate-300">-₹2,500.00</span>
-                              </div>
-                            </div>
-                          )}
-
-                          {index === 1 && (
-                            <div className="p-6 rounded-2xl bg-white/5 border border-white/5 space-y-4">
-                              <div className="flex justify-between items-center text-xs text-slate-400 font-bold">
-                                <span>Entertainment Limit</span>
-                                <span className="text-red-400">85% exceeded</span>
-                              </div>
-                              <div className="h-3 w-full bg-white/5 rounded-full overflow-hidden border border-white/5">
-                                <div className="h-full bg-gradient-to-r from-red-500 to-orange-500 rounded-full" style={{ width: '85%' }} />
-                              </div>
-                              <p className="text-[10px] text-slate-500 leading-normal">
-                                Alert generated automatically. You have exceeded your weekly budget by ₹1,400.
-                              </p>
-                            </div>
-                          )}
-
-                          {index === 2 && (
-                            <div className="space-y-4">
-                              <div className="flex items-center gap-3 bg-white/5 border border-white/5 p-4 rounded-2xl">
-                                <div className="h-10 w-10 rounded-full bg-primary-500/20 flex items-center justify-center text-white font-extrabold text-sm border border-primary-500/30">
-                                  A
-                                </div>
-                                <div className="flex-grow">
-                                  <span className="text-xs font-bold text-white block">Aditi (Spouse)</span>
-                                  <span className="text-[9px] text-slate-400 block">Spent ₹14,320 this month</span>
-                                </div>
-                                <span className="text-[10px] font-bold text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded-full border border-emerald-400/10">Active</span>
-                              </div>
-                              <div className="flex items-center gap-3 bg-white/5 border border-white/5 p-4 rounded-2xl">
-                                <div className="h-10 w-10 rounded-full bg-secondary-500/20 flex items-center justify-center text-white font-extrabold text-sm border border-secondary-500/30">
-                                  K
-                                </div>
-                                <div className="flex-grow">
-                                  <span className="text-xs font-bold text-white block">Kabir (Child)</span>
-                                  <span className="text-[9px] text-slate-400 block">Spent ₹1,800 this month</span>
-                                </div>
-                                <span className="text-[10px] font-bold text-indigo-400 bg-indigo-400/10 px-2 py-0.5 rounded-full border border-indigo-400/10">Child Cap</span>
-                              </div>
-                            </div>
-                          )}
-
-                          {index === 3 && (
-                            <div className="p-4 rounded-2xl bg-white/5 border border-white/5 flex gap-3.5 items-start">
-                              <div className="h-9 w-9 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/25 flex items-center justify-center flex-shrink-0 mt-0.5">
-                                <Sparkles className="h-5 w-5" />
-                              </div>
-                              <div className="space-y-1">
-                                <span className="text-xs font-bold text-white block">AI Recommendation</span>
-                                <p className="text-[10px] text-slate-400 leading-normal">
-                                  We noticed subscription spendings rose by 18% this month. Canceling inactive accounts could recover up to **₹800/month**.
-                                </p>
-                              </div>
-                            </div>
-                          )}
-
-                          {index === 4 && (
-                            <div className="flex flex-col items-center py-4 space-y-4">
-                              <div className="flex gap-2">
-                                <div className="h-2.5 w-10 rounded-full bg-primary-500/30" />
-                                <div className="h-2.5 w-16 rounded-full bg-secondary-500/40" />
-                                <div className="h-2.5 w-12 rounded-full bg-white/10" />
-                              </div>
-                              <div className="h-24 w-full flex items-end justify-around border-b border-white/10 px-6">
-                                <div className="w-6 bg-primary-500/40 hover:bg-primary-500 rounded-t-lg transition-all" style={{ height: '40%' }} />
-                                <div className="w-6 bg-secondary-500/40 hover:bg-secondary-500 rounded-t-lg transition-all" style={{ height: '70%' }} />
-                                <div className="w-6 bg-accent-pink/40 hover:bg-accent-pink rounded-t-lg transition-all" style={{ height: '55%' }} />
-                                <div className="w-6 bg-primary-600/40 hover:bg-primary-600 rounded-t-lg transition-all" style={{ height: '90%' }} />
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </motion.div>
+          {/* Trusted By Section (below Hero) */}
+          <section className="relative z-10 py-10 border-y border-white/5 bg-white/[0.01] backdrop-blur-3xl">
+            <div className="mx-auto max-w-[1440px] px-6 sm:px-8 lg:px-12 w-full text-center space-y-5">
+              <span className="text-[10px] uppercase font-extrabold tracking-[0.2em] text-slate-500 block">
+                Trusted by modern individuals & organizations
+              </span>
+              <div className="flex flex-wrap justify-center items-center gap-4 sm:gap-6">
+                {[
+                  { label: 'Families', desc: 'Shared limits' },
+                  { label: 'Freelancers', desc: 'Tax compliance' },
+                  { label: 'Small Businesses', desc: 'Workspaces' },
+                  { label: 'Students', desc: 'Budgeting tools' },
+                  { label: 'Individuals', desc: 'Smart audits' }
+                ].map((item, idx) => (
+                  <motion.div
+                    key={idx}
+                    whileHover={{ y: -2, scale: 1.03 }}
+                    className="px-5 py-3 rounded-2xl border border-white/5 bg-white/[0.02] backdrop-blur-xl shadow-glass flex items-center gap-2.5"
+                  >
+                    <CheckCircle2 className="h-4 w-4 text-primary-400" />
+                    <div className="text-left">
+                      <span className="text-xs font-bold text-white block">{item.label}</span>
+                      <span className="text-[8px] text-slate-500 uppercase font-semibold tracking-wider mt-0.5 block">{item.desc}</span>
                     </div>
-                  );
-                })}
+                  </motion.div>
+                ))}
               </div>
             </div>
           </section>
 
-          {/* FEATURES SECTION */}
-          <section className="relative z-10 py-24 border-t border-white/5 bg-transparent" id="features">
+          {/* FEATURES SECTION (9 cards) */}
+          <section className="relative z-10 py-24 border-b border-white/5 bg-transparent" id="features">
             <div className="mx-auto max-w-[1440px] px-6 sm:px-8 lg:px-12 w-full">
               <div className="text-center max-w-2xl mx-auto mb-20 space-y-4">
                 <h2 className="text-xs uppercase font-extrabold tracking-[0.2em] text-primary-400">Core Features</h2>
@@ -756,7 +742,7 @@ export function HomePage() {
                 </p>
               </div>
 
-              <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
                 {featuresList.map((item, idx) => (
                   <motion.div
                     key={idx}
@@ -780,6 +766,7 @@ export function HomePage() {
                       <p className="text-xs text-slate-500 mt-2 leading-relaxed">
                         {item.desc}
                       </p>
+                      {item.preview}
                     </div>
 
                     <div className="mt-6 flex items-center gap-1 text-[10px] uppercase font-bold tracking-widest text-slate-600 group-hover:text-primary-400 transition-colors">
@@ -792,30 +779,8 @@ export function HomePage() {
             </div>
           </section>
 
-          {/* STATISTICS SECTION */}
-          <section className="relative z-10 py-24 border-t border-white/5 bg-transparent">
-            <div className="mx-auto max-w-[1440px] px-6 sm:px-8 lg:px-12 w-full">
-              <div className="grid gap-10 grid-cols-2 lg:grid-cols-4 text-center">
-                {[
-                  { value: 1284000, suffix: '+', title: 'Total Transactions', desc: 'Logged and cataloged securely' },
-                  { value: 50280, suffix: '+', title: 'Active Users', desc: 'Syncing wallets globally' },
-                  { value: 450000000, suffix: '+', title: 'Expenses Tracked', desc: 'Saved and structured' },
-                  { value: 12500, suffix: '+', title: 'Families Managed', desc: 'Collaborating securely' },
-                ].map((stat, idx) => (
-                  <div key={idx} className="space-y-2">
-                    <div className="text-3xl sm:text-4xl lg:text-5xl font-black bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent">
-                      <Counter value={stat.value} suffix={stat.suffix} />
-                    </div>
-                    <h4 className="text-xs sm:text-sm font-semibold text-slate-300 uppercase tracking-wider">{stat.title}</h4>
-                    <p className="text-[10px] sm:text-xs text-slate-500">{stat.desc}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          {/* INTERACTIVE SCREENSHOTS SECTION */}
-          <section className="relative z-10 py-24 border-t border-white/5 bg-transparent" id="pricing">
+          {/* DASHBOARD SHOWCASE SECTION */}
+          <section className="relative z-10 py-24 border-b border-white/5 bg-transparent" id="showcase">
             <div className="mx-auto max-w-[1440px] px-6 sm:px-8 lg:px-12 w-full">
               <div className="text-center max-w-2xl mx-auto mb-16 space-y-4">
                 <h2 className="text-xs uppercase font-extrabold tracking-[0.2em] text-secondary-500">Platform Preview</h2>
@@ -830,11 +795,14 @@ export function HomePage() {
               {/* Interactive Navigation Tabs */}
               <div className="flex flex-wrap justify-center gap-2 mb-10 select-none">
                 {[
-                  { id: 'desktop', label: 'Desktop Dashboard' },
-                  { id: 'mobile', label: 'Mobile App View' },
-                  { id: 'analytics', label: 'Analytics Page' },
-                  { id: 'budget', label: 'Budget Management' },
+                  { id: 'dashboard', label: 'Dashboard' },
+                  { id: 'expenses', label: 'Expense Manager' },
                   { id: 'family', label: 'Family Dashboard' },
+                  { id: 'workspace', label: 'Workspace Dashboard' },
+                  { id: 'ai', label: 'AI Assistant' },
+                  { id: 'reports', label: 'Reports & Analytics' },
+                  { id: 'notifications', label: 'Notifications' },
+                  { id: 'budgets', label: 'Budgets' },
                 ].map((tab) => (
                   <button
                     key={tab.id}
@@ -851,13 +819,13 @@ export function HomePage() {
               </div>
 
               {/* Preview Tab Container */}
-              <div className="w-full max-w-5xl mx-auto rounded-2xl bg-bg-card/30 border border-white/10 p-6 shadow-2xl min-h-[400px] relative overflow-hidden flex flex-col justify-center">
+              <div className="w-full max-w-5xl mx-auto rounded-2xl bg-bg-card/30 border border-white/10 p-6 shadow-2xl min-h-[440px] relative overflow-hidden flex flex-col justify-center">
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-64 w-64 rounded-full bg-primary-500/5 blur-[90px] pointer-events-none" />
 
                 <AnimatePresence mode="wait">
-                  {activeTab === 'desktop' && (
+                  {activeTab === 'dashboard' && (
                     <motion.div
-                      key="desktop"
+                      key="dashboard"
                       initial={{ opacity: 0, scale: 0.98 }}
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.98 }}
@@ -897,95 +865,33 @@ export function HomePage() {
                     </motion.div>
                   )}
 
-                  {activeTab === 'mobile' && (
+                  {activeTab === 'expenses' && (
                     <motion.div
-                      key="mobile"
+                      key="expenses"
                       initial={{ opacity: 0, y: 15 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: 15 }}
-                      className="flex justify-center"
+                      className="space-y-4"
                     >
-                      {/* Phone shell container */}
-                      <div className="w-64 border-4 border-white/10 rounded-[32px] bg-bg-deep p-4 relative shadow-2xl">
-                        <div className="absolute top-2 left-1/2 -translate-x-1/2 w-20 h-4 bg-white/10 rounded-full" />
-                        <div className="pt-6 space-y-4">
-                          <div className="text-center">
-                            <span className="text-[9px] text-slate-400 uppercase font-semibold">Weekly Spend</span>
-                            <h4 className="text-lg font-black text-white">₹5,400.00</h4>
-                          </div>
-                          <div className="h-[1px] bg-white/5" />
-                          <div className="space-y-2">
-                            <div className="flex justify-between items-center text-[9px] text-slate-300 font-bold bg-white/5 p-2 rounded-lg">
-                              <span>Starbucks</span>
-                              <span className="text-white">-₹320.00</span>
-                            </div>
-                            <div className="flex justify-between items-center text-[9px] text-slate-300 font-bold bg-white/5 p-2 rounded-lg">
-                              <span>Uber Taxi</span>
-                              <span className="text-white">-₹180.00</span>
-                            </div>
+                      <div className="flex items-center justify-between p-3.5 bg-white/5 border border-white/5 rounded-xl">
+                        <div className="flex items-center gap-3">
+                          <div className="h-8 w-8 bg-purple-500/10 text-purple-400 border border-purple-500/15 flex items-center justify-center rounded-lg"><Wallet className="h-4 w-4" /></div>
+                          <div>
+                            <span className="text-xs font-bold text-white block">Starbucks Coffee</span>
+                            <span className="text-[9px] text-slate-500 block">Food & Dining • June 26</span>
                           </div>
                         </div>
+                        <span className="text-xs font-bold text-slate-300">-₹380.00</span>
                       </div>
-                    </motion.div>
-                  )}
-
-                  {activeTab === 'analytics' && (
-                    <motion.div
-                      key="analytics"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className="space-y-6"
-                    >
-                      <div className="h-56 rounded-xl bg-white/[0.01] border border-white/5 flex flex-col justify-end p-6 select-none">
-                        <div className="flex items-end justify-between h-40 max-w-lg mx-auto w-full border-b border-white/5 pb-2">
-                          <div className="w-10 bg-gradient-to-t from-primary-500 to-indigo-600 hover:scale-105 transition-transform rounded-t" style={{ height: '65%' }} />
-                          <div className="w-10 bg-gradient-to-t from-secondary-500 to-cyan-600 hover:scale-105 transition-transform rounded-t" style={{ height: '45%' }} />
-                          <div className="w-10 bg-gradient-to-t from-primary-500 to-indigo-600 hover:scale-105 transition-transform rounded-t" style={{ height: '80%' }} />
-                          <div className="w-10 bg-gradient-to-t from-accent-pink to-pink-600 hover:scale-105 transition-transform rounded-t" style={{ height: '95%' }} />
+                      <div className="flex items-center justify-between p-3.5 bg-white/5 border border-white/5 rounded-xl">
+                        <div className="flex items-center gap-3">
+                          <div className="h-8 w-8 bg-blue-500/10 text-blue-400 border border-blue-500/15 flex items-center justify-center rounded-lg"><Clock className="h-4 w-4" /></div>
+                          <div>
+                            <span className="text-xs font-bold text-white block">Spotify Subscription</span>
+                            <span className="text-[9px] text-slate-500 block">Bills & Utilities • June 25</span>
+                          </div>
                         </div>
-                        <div className="flex justify-between max-w-lg mx-auto w-full text-[9px] text-slate-500 uppercase font-bold mt-2.5">
-                          <span>Week 1</span>
-                          <span>Week 2</span>
-                          <span>Week 3</span>
-                          <span>Week 4</span>
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
-
-                  {activeTab === 'budget' && (
-                    <motion.div
-                      key="budget"
-                      initial={{ opacity: 0, scale: 0.98 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.98 }}
-                      className="space-y-5"
-                    >
-                      <div className="p-4 bg-white/5 border border-white/5 rounded-xl space-y-3.5 max-w-md mx-auto">
-                        <div className="flex justify-between text-xs font-semibold">
-                          <span className="text-slate-300">Food & Beverages</span>
-                          <span className="text-slate-400">₹4,200 / ₹6,000</span>
-                        </div>
-                        <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden">
-                          <div className="h-full bg-indigo-500" style={{ width: '70%' }} />
-                        </div>
-                        
-                        <div className="flex justify-between text-xs font-semibold">
-                          <span className="text-slate-300">Office Rent</span>
-                          <span className="text-slate-400">₹15,000 / ₹15,000</span>
-                        </div>
-                        <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden">
-                          <div className="h-full bg-emerald-500" style={{ width: '100%' }} />
-                        </div>
-
-                        <div className="flex justify-between text-xs font-semibold">
-                          <span className="text-slate-300">Cab & Transport</span>
-                          <span className="text-slate-400">₹2,800 / ₹2,000</span>
-                        </div>
-                        <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden">
-                          <div className="h-full bg-red-500" style={{ width: '100%' }} />
-                        </div>
+                        <span className="text-xs font-bold text-slate-300">-₹179.00</span>
                       </div>
                     </motion.div>
                   )}
@@ -1000,22 +906,17 @@ export function HomePage() {
                     >
                       <div className="flex justify-between items-center p-3.5 bg-white/5 border border-white/5 rounded-xl">
                         <div className="flex items-center gap-3">
-                          <div className="h-9 w-9 rounded-full bg-primary-500 flex items-center justify-center font-extrabold text-white text-xs border border-primary-500/20">
-                            HK
-                          </div>
+                          <div className="h-9 w-9 rounded-full bg-primary-500 flex items-center justify-center font-extrabold text-white text-xs border border-primary-500/20">HK</div>
                           <div>
                             <span className="text-xs font-bold text-white block">Hiten (Owner)</span>
-                            <span className="text-[10px] text-slate-400 block">Spent ₹18,400.00</span>
+                            <span className="text-[10px] text-slate-400 block">Spent ₹18,453.00</span>
                           </div>
                         </div>
                         <span className="text-xs font-bold text-slate-300">₹20,000 Cap</span>
                       </div>
-
                       <div className="flex justify-between items-center p-3.5 bg-white/5 border border-white/5 rounded-xl">
                         <div className="flex items-center gap-3">
-                          <div className="h-9 w-9 rounded-full bg-secondary-500 flex items-center justify-center font-extrabold text-white text-xs border border-secondary-500/20">
-                            AK
-                          </div>
+                          <div className="h-9 w-9 rounded-full bg-secondary-500 flex items-center justify-center font-extrabold text-white text-xs border border-secondary-500/20">AK</div>
                           <div>
                             <span className="text-xs font-bold text-white block">Aishwarya (Spouse)</span>
                             <span className="text-[10px] text-slate-400 block">Spent ₹4,230.00</span>
@@ -1025,13 +926,410 @@ export function HomePage() {
                       </div>
                     </motion.div>
                   )}
+
+                  {activeTab === 'workspace' && (
+                    <motion.div
+                      key="workspace"
+                      initial={{ opacity: 0, scale: 0.98 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.98 }}
+                      className="space-y-4 max-w-lg mx-auto"
+                    >
+                      <div className="p-4 bg-white/5 border border-white/5 rounded-xl flex items-center justify-between">
+                        <div>
+                          <span className="text-xs font-bold text-white block">Engineering Operations</span>
+                          <span className="text-[9px] text-slate-500 uppercase tracking-wider block mt-1">Budget Scoped to Department</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-xs font-bold text-slate-300">₹8,500.00 / ₹25,000.00</span>
+                          <div className="h-1.5 w-24 bg-white/10 rounded-full mt-1.5 overflow-hidden"><div className="h-full bg-indigo-500" style={{ width: '34%' }} /></div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {activeTab === 'ai' && (
+                    <motion.div
+                      key="ai"
+                      initial={{ opacity: 0, y: 15 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 15 }}
+                      className="space-y-4 max-w-md mx-auto bg-white/[0.02] border border-white/5 p-5 rounded-2xl"
+                    >
+                      <div className="flex items-center gap-2 mb-3">
+                        <Sparkles className="h-4 w-4 text-purple-400" />
+                        <span className="text-xs font-bold text-white uppercase tracking-wider">AI Assistant Suggestions</span>
+                      </div>
+                      <p className="text-xs text-slate-400 leading-relaxed">
+                        "Your subscription costs grew by 18% compared to last month. Consider review sessions to prune inactive licenses."
+                      </p>
+                    </motion.div>
+                  )}
+
+                  {activeTab === 'reports' && (
+                    <motion.div
+                      key="reports"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="space-y-6"
+                    >
+                      <div className="h-56 rounded-xl bg-white/[0.01] border border-white/5 flex flex-col justify-end p-6 select-none">
+                        <div className="flex items-end justify-between h-40 max-w-lg mx-auto w-full border-b border-white/5 pb-2">
+                          <div className="w-10 bg-gradient-to-t from-primary-500 to-indigo-600 rounded-t" style={{ height: '65%' }} />
+                          <div className="w-10 bg-gradient-to-t from-secondary-500 to-cyan-600 rounded-t" style={{ height: '45%' }} />
+                          <div className="w-10 bg-gradient-to-t from-primary-500 to-indigo-600 rounded-t" style={{ height: '80%' }} />
+                          <div className="w-10 bg-gradient-to-t from-accent-pink to-pink-600 rounded-t" style={{ height: '95%' }} />
+                        </div>
+                        <div className="flex justify-between max-w-lg mx-auto w-full text-[9px] text-slate-500 uppercase font-bold mt-2.5">
+                          <span>Groceries</span>
+                          <span>Rent</span>
+                          <span>Travel</span>
+                          <span>Utilities</span>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {activeTab === 'notifications' && (
+                    <motion.div
+                      key="notifications"
+                      initial={{ opacity: 0, scale: 0.98 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.98 }}
+                      className="space-y-3"
+                    >
+                      <div className="flex items-center gap-3 p-3 bg-white/5 border border-white/5 rounded-xl">
+                        <Bell className="h-4 w-4 text-purple-400" />
+                        <span className="text-xs text-slate-300">Family Budget Alert: Shopping limit is 85% Utilized.</span>
+                      </div>
+                      <div className="flex items-center gap-3 p-3 bg-white/5 border border-white/5 rounded-xl">
+                        <Bell className="h-4 w-4 text-emerald-400" />
+                        <span className="text-xs text-slate-300">Sync Success: 1 new invoice scanned and processed.</span>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {activeTab === 'budgets' && (
+                    <motion.div
+                      key="budgets"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="space-y-4 max-w-md mx-auto"
+                    >
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-xs font-semibold">
+                          <span className="text-slate-300">Food Limit progress</span>
+                          <span className="text-slate-400">70% (₹4,200/₹6,000)</span>
+                        </div>
+                        <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-indigo-500" style={{ width: '70%' }} /></div>
+                      </div>
+                    </motion.div>
+                  )}
                 </AnimatePresence>
               </div>
             </div>
           </section>
 
-          {/* TESTIMONIALS SECTION */}
-          <section className="relative z-10 py-24 border-t border-white/5 bg-transparent">
+          {/* DEDICATED AI ASSISTANT SHOWCASE SECTION */}
+          <section className="relative z-10 py-24 border-b border-white/5 bg-transparent">
+            <div className="mx-auto max-w-[1440px] px-6 sm:px-8 lg:px-12 w-full grid gap-16 lg:grid-cols-2 items-center">
+              <div className="space-y-6 text-left">
+                <span className="text-xs uppercase font-extrabold tracking-[0.2em] text-primary-400">Gemini AI Engine</span>
+                <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight leading-[1.2]">
+                  Chat with Expenso Intelligence
+                </h2>
+                <p className="text-slate-400 text-sm sm:text-base leading-relaxed">
+                  Query your ledger in plain English. Detect abnormal transaction rates, analyze trends, and compile immediate savings recommendations on autopilot.
+                </p>
+
+                {/* Questions Trigger Tags */}
+                <div className="space-y-3">
+                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Ask example questions</span>
+                  <div className="flex flex-wrap gap-2.5">
+                    {aiDialogue.map((item, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => triggerChatStep(idx)}
+                        className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all duration-300 cursor-pointer ${
+                          chatStep === idx
+                            ? 'bg-purple-500/10 border-purple-500/35 text-white'
+                            : 'border-white/5 bg-white/[0.01] text-slate-400 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        "{item.q}"
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Chat Simulator Panel */}
+              <div className="flex justify-center">
+                <div className="w-full max-w-[440px] rounded-3xl border border-white/10 bg-white/[0.02] backdrop-blur-2xl p-6 shadow-2xl relative overflow-hidden select-none">
+                  {/* Top Header */}
+                  <div className="flex items-center justify-between pb-4 border-b border-white/5 mb-4">
+                    <div className="flex items-center gap-2">
+                      <div className="h-7 w-7 rounded-lg bg-purple-500/10 border border-purple-500/15 flex items-center justify-center text-purple-400">
+                        <Sparkles className="h-4.5 w-4.5" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-white block">Expenso AI</span>
+                        <span className="text-[9px] text-slate-500 block uppercase font-bold">Gemini-Powered</span>
+                      </div>
+                    </div>
+                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                  </div>
+
+                  {/* Message History */}
+                  <div className="h-60 overflow-y-auto space-y-4 pr-1">
+                    {chatMessages.map((msg, i) => (
+                      <div
+                        key={i}
+                        className={`flex flex-col ${msg.sender === 'user' ? 'items-end' : 'items-start'}`}
+                      >
+                        <span className="text-[8px] text-slate-500 uppercase font-bold tracking-wider mb-1">
+                          {msg.sender === 'user' ? 'You' : 'AI Assistant'}
+                        </span>
+                        <div
+                          className={`p-3.5 rounded-2xl text-xs leading-relaxed max-w-[85%] border ${
+                            msg.sender === 'user'
+                              ? 'bg-purple-500/10 border-purple-500/15 text-purple-100 rounded-tr-none'
+                              : 'bg-white/5 border-white/5 text-slate-200 rounded-tl-none'
+                          }`}
+                        >
+                          {msg.text}
+                        </div>
+                      </div>
+                    ))}
+
+                    {isTyping && (
+                      <div className="flex flex-col items-start">
+                        <span className="text-[8px] text-slate-500 uppercase font-bold tracking-wider mb-1">AI Assistant</span>
+                        <div className="p-3 bg-white/5 border border-white/5 rounded-2xl rounded-tl-none flex items-center gap-1">
+                          <span className="h-1.5 w-1.5 bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                          <span className="h-1.5 w-1.5 bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                          <span className="h-1.5 w-1.5 bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* RECEIPT OCR SECTION */}
+          <section className="relative z-10 py-24 border-b border-white/5 bg-transparent">
+            <div className="mx-auto max-w-[1440px] px-6 sm:px-8 lg:px-12 w-full grid gap-16 lg:grid-cols-[1fr_auto_1fr] items-center">
+              {/* Left: Receipt Upload frame */}
+              <div className="space-y-4 text-center sm:text-left">
+                <span className="text-xs uppercase font-extrabold tracking-[0.2em] text-cyan-400">Step 1: Receipt Capture</span>
+                <h3 className="text-xl sm:text-2xl font-black text-white">Upload and Scan</h3>
+                <div className="h-64 w-full max-w-sm rounded-3xl bg-white/[0.01] border-2 border-dashed border-white/10 flex flex-col items-center justify-center p-6 relative overflow-hidden select-none mx-auto sm:mx-0">
+                  {/* Scanner line anim */}
+                  <div className="absolute top-0 left-0 right-0 h-[2px] bg-cyan-400 shadow-[0_0_15px_#22d3ee] animate-scanner" />
+                  <FileText className="h-12 w-12 text-slate-500 mb-3" />
+                  <span className="text-xs font-bold text-white">OCR Invoices Scanner</span>
+                  <span className="text-[10px] text-slate-500 mt-1">Reading Cost & Merchant details</span>
+                </div>
+              </div>
+
+              {/* Middle Arrow */}
+              <div className="hidden lg:flex items-center justify-center">
+                <div className="h-10 w-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-primary-400 animate-pulse">
+                  <ArrowRight className="h-5 w-5" />
+                </div>
+              </div>
+
+              {/* Right: auto filled form */}
+              <div className="space-y-4 text-left">
+                <span className="text-xs uppercase font-extrabold tracking-[0.2em] text-emerald-400">Step 2: Auto-Filled Form</span>
+                <h3 className="text-xl sm:text-2xl font-black text-white">Audit & Log Expense</h3>
+                <div className="p-6 rounded-3xl bg-white/[0.02] border border-white/10 space-y-4 max-w-sm">
+                  <div className="flex justify-between items-center pb-2.5 border-b border-white/5">
+                    <span className="text-xs font-bold text-white">Verify Metadata</span>
+                    <span className="text-[8px] bg-emerald-400/10 border border-emerald-400/20 text-emerald-400 font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                      99% Match
+                    </span>
+                  </div>
+                  <div className="grid gap-3 text-xs">
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-slate-500 block uppercase font-bold">Merchant</span>
+                      <div className="p-2.5 bg-white/5 rounded-xl text-white font-semibold">Uber Taxi</div>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-slate-500 block uppercase font-bold">Total Amount</span>
+                      <div className="p-2.5 bg-white/5 rounded-xl text-white font-semibold">₹320.00</div>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-slate-500 block uppercase font-bold">Category Match</span>
+                      <div className="p-2.5 bg-white/5 rounded-xl text-white font-semibold flex items-center justify-between">
+                        <span>Travel & Transport</span>
+                        <Sparkles className="h-3.5 w-3.5 text-purple-400" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* FAMILY FEATURE SECTION */}
+          <section className="relative z-10 py-24 border-b border-white/5 bg-transparent">
+            <div className="mx-auto max-w-[1440px] px-6 sm:px-8 lg:px-12 w-full grid gap-16 lg:grid-cols-2 items-center">
+              <div className="space-y-6 text-left">
+                <span className="text-xs uppercase font-extrabold tracking-[0.2em] text-pink-400">Collaboration Mode</span>
+                <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight leading-[1.2]">
+                  Shared Family Budgets
+                </h2>
+                <p className="text-slate-400 text-sm sm:text-base leading-relaxed">
+                  Establish a shared family financial hub. Keep individual tabs, monitor combined balance progress rings, and manage kids' budgets inside a secure synced account.
+                </p>
+                <div className="grid gap-3 text-xs font-semibold text-slate-300">
+                  <div className="flex items-center gap-2">
+                    <Check className="h-4.5 w-4.5 text-pink-400" />
+                    <span>Synchronize partner wallets</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Check className="h-4.5 w-4.5 text-pink-400" />
+                    <span>Receive instant budget limit push notifications</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Family mockup visualization */}
+              <div className="flex justify-center">
+                <div className="w-full max-w-[420px] p-6 rounded-3xl bg-white/[0.02] border border-white/10 space-y-6 shadow-2xl relative overflow-hidden">
+                  <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-pink-500 to-rose-600" />
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-bold text-white uppercase tracking-wider">Family Hub Overview</span>
+                    <span className="text-pink-400 font-bold">June 2026</span>
+                  </div>
+
+                  {/* budget bar */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-xs font-semibold">
+                      <span className="text-slate-400">Monthly Spending Limit</span>
+                      <span className="text-slate-200">₹18,453 / ₹1,00,000</span>
+                    </div>
+                    <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-pink-500" style={{ width: '18%' }} /></div>
+                  </div>
+
+                  <div className="h-[1px] bg-white/5" />
+
+                  {/* Leaderboard contributors */}
+                  <div className="space-y-3">
+                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Contributor Board</span>
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-full bg-purple-500 flex items-center justify-center font-bold text-white text-xs">H</div>
+                      <div className="flex-grow min-w-0">
+                        <span className="text-xs font-bold text-white block">Hiten (Owner)</span>
+                        <span className="text-[9px] text-slate-500 block">7 transactions</span>
+                      </div>
+                      <span className="text-xs font-bold text-slate-300">₹18,453.00</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* WORKSPACE COLLABORATION SECTION */}
+          <section className="relative z-10 py-24 border-b border-white/5 bg-transparent">
+            <div className="mx-auto max-w-[1440px] px-6 sm:px-8 lg:px-12 w-full grid gap-16 lg:grid-cols-2 items-center">
+              {/* Workspace mockup */}
+              <div className="flex justify-center lg:order-2">
+                <div className="w-full max-w-[420px] p-6 rounded-3xl bg-white/[0.02] border border-white/10 space-y-6 shadow-2xl relative overflow-hidden">
+                  <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-teal-500 to-indigo-600" />
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-bold text-white uppercase tracking-wider">Business Workspace</span>
+                    <span className="text-[9px] bg-teal-400/10 border border-teal-400/20 text-teal-400 font-extrabold px-2.5 py-0.5 rounded-full">Active</span>
+                  </div>
+
+                  {/* Approval workflow card */}
+                  <div className="space-y-3">
+                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Approval Queue</span>
+                    <div className="flex items-center justify-between p-3 bg-white/5 border border-white/5 rounded-xl">
+                      <div>
+                        <span className="text-xs font-bold text-white block">SaaS Server Billing</span>
+                        <span className="text-[9px] text-slate-400 mt-1 block">Requested by Rohan V.</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-full">Pending</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Workspace content */}
+              <div className="space-y-6 text-left lg:order-1">
+                <span className="text-xs uppercase font-extrabold tracking-[0.2em] text-teal-400">Enterprise Isolation</span>
+                <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight leading-[1.2]">
+                  Workspace Isolation & Approval Workflows
+                </h2>
+                <p className="text-slate-400 text-sm sm:text-base leading-relaxed">
+                  Delegate spending rules across multiple users and departments. Track expense approvals, establish workspace limits, and audit logs securely.
+                </p>
+              </div>
+            </div>
+          </section>
+
+          {/* INTERACTIVE ANALYTICS SECTION */}
+          <section className="relative z-10 py-24 border-b border-white/5 bg-transparent">
+            <div className="mx-auto max-w-[1440px] px-6 sm:px-8 lg:px-12 w-full text-center space-y-16">
+              <div className="max-w-2xl mx-auto space-y-4">
+                <h2 className="text-xs uppercase font-extrabold tracking-[0.2em] text-secondary-500">Live Analytics</h2>
+                <p className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+                  Visualize Your Income & Spending Trends
+                </p>
+                <p className="text-slate-400 text-sm sm:text-base leading-relaxed">
+                  Interactive, dynamically animated visual charts designed cleanly to render spending density, gauges, and line targets.
+                </p>
+              </div>
+
+              {/* Grid of SVGs charts */}
+              <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
+                {/* 1. Line Chart */}
+                <div className="p-6 rounded-3xl bg-white/[0.01] border border-white/5 hover:border-white/10 transition-colors space-y-4">
+                  <span className="text-xs font-bold text-white block text-left">Spending Over Time</span>
+                  <div className="h-32 flex items-end">
+                    <svg className="w-full h-full overflow-visible" viewBox="0 0 100 40">
+                      <path d="M0,35 Q20,10 40,25 T80,5 T100,15" fill="none" stroke="#6366f1" strokeWidth="2.5" />
+                    </svg>
+                  </div>
+                </div>
+
+                {/* 2. Bar Chart */}
+                <div className="p-6 rounded-3xl bg-white/[0.01] border border-white/5 hover:border-white/10 transition-colors space-y-4">
+                  <span className="text-xs font-bold text-white block text-left">Weekly Outflow</span>
+                  <div className="h-32 flex justify-between items-end px-4 border-b border-white/5 pb-1">
+                    <div className="w-6 bg-purple-500/80 rounded-t hover:bg-purple-500 transition-colors" style={{ height: '40%' }} />
+                    <div className="w-6 bg-purple-500/80 rounded-t hover:bg-purple-500 transition-colors" style={{ height: '75%' }} />
+                    <div className="w-6 bg-purple-500/80 rounded-t hover:bg-purple-500 transition-colors" style={{ height: '50%' }} />
+                    <div className="w-6 bg-purple-500/80 rounded-t hover:bg-purple-500 transition-colors" style={{ height: '90%' }} />
+                  </div>
+                </div>
+
+                {/* 3. Pie Chart (Distribution) */}
+                <div className="p-6 rounded-3xl bg-white/[0.01] border border-white/5 hover:border-white/10 transition-colors space-y-4">
+                  <span className="text-xs font-bold text-white block text-left">Category Shares</span>
+                  <div className="h-32 flex items-center justify-center">
+                    <svg className="h-28 w-28 overflow-visible" viewBox="0 0 36 36">
+                      <circle cx="18" cy="18" r="15.915" fill="transparent" stroke="rgba(255,255,255,0.05)" strokeWidth="4.2" />
+                      <circle cx="18" cy="18" r="15.915" fill="transparent" stroke="#6366f1" strokeWidth="4.2" strokeDasharray="40 60" strokeDashoffset="25" />
+                      <circle cx="18" cy="18" r="15.915" fill="transparent" stroke="#06b6d4" strokeWidth="4.2" strokeDasharray="30 70" strokeDashoffset="85" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* PREMIUM TESTIMONIALS GRID (6 Cards) */}
+          <section className="relative z-10 py-24 border-b border-white/5 bg-transparent">
             <div className="mx-auto max-w-[1440px] px-6 sm:px-8 lg:px-12 w-full">
               <div className="text-center max-w-2xl mx-auto mb-20 space-y-4">
                 <h2 className="text-xs uppercase font-extrabold tracking-[0.2em] text-accent-pink">Reviews</h2>
@@ -1045,19 +1343,29 @@ export function HomePage() {
 
               <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
                 {[
-                  { text: "This application changed the way we manage our child caps. Setting up limits and seeing the dynamic graphs saved us nearly ₹12,000 in just two months.", author: "Rohan Mehra", role: "Product Manager, Bangalore" },
-                  { text: "The OCR receipt scanning tool and automatic category match works with high-level accuracy. We no longer write expenses manually.", author: "Neha Gupta", role: "Freelance Designer, Pune" },
-                  { text: "Perfect dashboard flow and secure Supabase integration. Highly recommended for couples seeking to synchronize their accounts.", author: "Arjun Verma", role: "DevOps Engineer, Noida" }
+                  { text: "This application changed the way we manage our child caps. Setting up limits and seeing the dynamic graphs saved us nearly ₹12,000 in just two months.", author: "Rohan Mehra", role: "Product Manager, Bangalore", rating: 5 },
+                  { text: "The OCR receipt scanning tool and automatic category match works with high-level accuracy. We no longer write expenses manually.", author: "Neha Gupta", role: "Freelance Designer, Pune", rating: 5 },
+                  { text: "Perfect dashboard flow and secure Supabase integration. Highly recommended for couples seeking to synchronize their accounts.", author: "Arjun Verma", role: "DevOps Engineer, Noida", rating: 5 },
+                  { text: "Workspaces let our engineering team isolate corporate subscriptions from personal limits. A secure, clean solution.", author: "Karan Johar", role: "Tech Lead, Mumbai", rating: 5 },
+                  { text: "The Free tier is already incredible. It helped me learn discipline and track my daily average spending without complex layouts.", author: "Kabir Singh", role: "University Student, Delhi", rating: 5 },
+                  { text: "The AI recommendation matched my subscription logs and helped flag duplicate payments in seconds. Pro package is worth every rupee.", author: "Sneha Patel", role: "Agency Director, Pune", rating: 5 }
                 ].map((card, idx) => (
                   <div
                     key={idx}
                     className="p-6 rounded-2xl bg-bg-card/40 border border-white/5 hover:border-white/15 transition-all shadow-md relative group flex flex-col justify-between"
                   >
                     <div className="absolute top-4 right-6 text-primary-400/20 text-5xl font-serif select-none">“</div>
-                    <p className="text-slate-300 text-xs sm:text-sm leading-relaxed mb-6 italic relative z-10">
-                      {card.text}
-                    </p>
-                    <div className="flex items-center gap-3">
+                    <div className="space-y-4 relative z-10">
+                      <div className="flex gap-0.5">
+                        {[...Array(card.rating)].map((_, i) => (
+                          <Star key={i} className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                        ))}
+                      </div>
+                      <p className="text-slate-300 text-xs sm:text-sm leading-relaxed italic">
+                        "{card.text}"
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3 mt-6">
                       <div className="h-9 w-9 rounded-full bg-gradient-to-tr from-primary-500 to-secondary-500 flex items-center justify-center text-white font-extrabold text-xs">
                         {card.author.charAt(0)}
                       </div>
@@ -1072,83 +1380,225 @@ export function HomePage() {
             </div>
           </section>
 
-          {/* FOUNDER / OWNER INFORMATION SECTION */}
-          <section className="relative z-10 py-24 border-t border-white/5 bg-transparent">
-            <div className="mx-auto max-w-[1440px] px-6 sm:px-8 lg:px-12 w-full flex flex-col items-center">
-              <div className="text-center max-w-2xl mx-auto mb-16 space-y-4">
-                <h2 className="text-xs uppercase font-extrabold tracking-[0.2em] text-primary-400">Founder Profile</h2>
+          {/* PRICING PREVIEW SECTION */}
+          <section className="relative z-10 py-24 border-b border-white/5 bg-transparent" id="pricing">
+            <div className="mx-auto max-w-[1440px] px-6 sm:px-8 lg:px-12 w-full">
+              <div className="text-center max-w-2xl mx-auto mb-20 space-y-4">
+                <h2 className="text-xs uppercase font-extrabold tracking-[0.2em] text-primary-400">Simple Tiers</h2>
                 <p className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-                  Meet the Architect
+                  Pricing Built for Financial Growth
                 </p>
                 <p className="text-slate-400 text-sm sm:text-base leading-relaxed">
-                  Designed and developed with a vision to streamline household finances and personal auditing.
+                  Start tracking your accounts for free, or scale up to unlock unlimited syncing, family invites, and Gemini AI insights.
                 </p>
               </div>
 
-              {/* Premium Profile Card */}
-              <motion.div
-                whileHover={{ y: -4 }}
-                className="w-full max-w-2xl bg-gradient-to-r from-bg-card/70 to-bg-deep/70 backdrop-blur-2xl border border-white/10 rounded-3xl p-8 shadow-2xl relative overflow-hidden flex flex-col sm:flex-row gap-8 items-center"
-              >
-                {/* Glowing corner background decoration */}
-                <div className="absolute -bottom-20 -right-20 h-40 w-40 rounded-full bg-secondary-500/10 blur-3xl pointer-events-none" />
-                
-                {/* Founder Avatar Placeholder */}
-                <div className="h-32 w-32 rounded-2xl bg-gradient-to-tr from-primary-500 to-secondary-500 p-[2.5px] shadow-lg flex-shrink-0 relative overflow-hidden group/avatar select-none">
-                  <div className="h-full w-full rounded-[14px] bg-bg-card flex flex-col items-center justify-center border border-black/10">
-                    <span className="text-3xl font-black text-white">HK</span>
-                    <span className="text-[8px] text-slate-500 font-bold uppercase tracking-widest mt-1">Founder</span>
+              {/* Pricing Cards Grid */}
+              <div className="grid gap-8 md:grid-cols-3 max-w-5xl mx-auto items-stretch">
+                {/* 1. Free */}
+                <div className="p-8 rounded-3xl bg-white/[0.01] border border-white/5 hover:border-white/10 transition-all flex flex-col justify-between shadow-xl">
+                  <div className="space-y-6">
+                    <div>
+                      <h4 className="text-base font-bold text-white">Free Starter</h4>
+                      <p className="text-[10px] text-slate-500 mt-1 uppercase font-bold tracking-wider">For Personal Auditing</p>
+                    </div>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-3xl font-black text-white">₹0</span>
+                      <span className="text-xs text-slate-500">/ forever</span>
+                    </div>
+                    <ul className="space-y-3.5 text-xs text-slate-400 border-t border-white/5 pt-6">
+                      <li className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-400" /> <span>Track up to 200 expenses/mo</span></li>
+                      <li className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-400" /> <span>Standard categorization</span></li>
+                      <li className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-400" /> <span>1 Personal Workspace</span></li>
+                    </ul>
                   </div>
+                  <Link to="/register" className="mt-8 block">
+                    <Button variant="secondary" className="w-full justify-center">Get Started</Button>
+                  </Link>
                 </div>
 
-                <div className="flex-grow space-y-4 text-center sm:text-left">
-                  <div>
-                    <h3 className="text-2xl font-black text-white tracking-tight">Hiten Katariya</h3>
-                    <p className="text-xs text-primary-400 font-bold tracking-wider uppercase mt-1">Founder & Lead Software Architect</p>
+                {/* 2. Pro (Highlighted) */}
+                <div className="p-8 rounded-3xl bg-white/[0.03] border border-primary-500/35 relative overflow-hidden flex flex-col justify-between shadow-2xl scale-100 md:scale-105">
+                  <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-primary-500 via-secondary-500 to-accent-pink" />
+                  <div className="absolute -top-10 -right-10 h-28 w-28 rounded-full bg-primary-500/10 blur-xl pointer-events-none" />
+                  <div className="space-y-6">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <h4 className="text-base font-bold text-white">Expenso Pro</h4>
+                        <p className="text-[10px] text-primary-400 mt-1 uppercase font-bold tracking-wider">Most Popular</p>
+                      </div>
+                      <span className="text-[8px] bg-primary-500/10 border border-primary-500/20 text-primary-400 font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider">Save 20%</span>
+                    </div>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-3xl font-black text-white">₹499</span>
+                      <span className="text-xs text-slate-500">/ month</span>
+                    </div>
+                    <ul className="space-y-3.5 text-xs text-slate-300 border-t border-white/5 pt-6">
+                      <li className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-400" /> <span>Unlimited monthly expenses</span></li>
+                      <li className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-400" /> <span>Full-access OCR receipt scan</span></li>
+                      <li className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-400" /> <span>Family Sync (Up to 5 members)</span></li>
+                      <li className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-400" /> <span>Gemini AI Savings Insights</span></li>
+                    </ul>
                   </div>
+                  <Link to="/register" className="mt-8 block">
+                    <Button className="w-full justify-center shadow-[0_0_24px_rgba(99,102,241,0.3)] bg-gradient-to-r from-primary-500 to-primary-600">Start Free Trial</Button>
+                  </Link>
+                </div>
 
-                  <p className="text-slate-400 text-xs sm:text-sm leading-relaxed">
-                    Hiten is a Senior Product Designer and Software Engineer with a passion for designing visual animations, database security, and high-performance Web apps.
+                {/* 3. Enterprise */}
+                <div className="p-8 rounded-3xl bg-white/[0.01] border border-white/5 hover:border-white/10 transition-all flex flex-col justify-between shadow-xl">
+                  <div className="space-y-6">
+                    <div>
+                      <h4 className="text-base font-bold text-white">Enterprise</h4>
+                      <p className="text-[10px] text-slate-500 mt-1 uppercase font-bold tracking-wider">For Small Teams & orgs</p>
+                    </div>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-3xl font-black text-white">Custom</span>
+                      <span className="text-xs text-slate-500">/ tailored</span>
+                    </div>
+                    <ul className="space-y-3.5 text-xs text-slate-400 border-t border-white/5 pt-6">
+                      <li className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-400" /> <span>All Pro capabilities included</span></li>
+                      <li className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-400" /> <span>Approval workflows & logs</span></li>
+                      <li className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-400" /> <span>Priority developer channels</span></li>
+                    </ul>
+                  </div>
+                  <a href="#contact" className="mt-8 block">
+                    <Button variant="secondary" className="w-full justify-center">Contact Sales</Button>
+                  </a>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* SECURITY & COMPLIANCE BADGING */}
+          <section className="relative z-10 py-24 border-b border-white/5 bg-transparent">
+            <div className="mx-auto max-w-[1440px] px-6 sm:px-8 lg:px-12 w-full text-center space-y-16">
+              <div className="max-w-2xl mx-auto space-y-4">
+                <h2 className="text-xs uppercase font-extrabold tracking-[0.2em] text-teal-400">Enterprise Security</h2>
+                <p className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+                  Zero Compromises. Your Ledger is Private.
+                </p>
+                <p className="text-slate-400 text-sm sm:text-base leading-relaxed">
+                  We deploy military-grade encryption keys and isolation parameters to ensure your transaction statements remain strictly anonymous.
+                </p>
+              </div>
+
+              {/* Grid of Security features */}
+              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 max-w-5xl mx-auto">
+                {[
+                  { title: 'AES-256 Encryption', desc: 'Secure database storage encryption parameters.', icon: Lock },
+                  { title: 'JWT Authentication', desc: 'Secure Express API validation routes.', icon: Shield },
+                  { title: 'Supabase Database', desc: 'Managed PostgreSQL architecture with strict RLS.', icon: Layers },
+                  { title: 'GDPR Compliant', desc: '30-day soft deletes with feedback reasons.', icon: Globe },
+                  { title: 'SOC2 Ready', desc: 'Full compliance tracking and auditable entries.', icon: Award },
+                  { title: 'Row-Level Security', desc: 'Isolation schemas prevent cross-tenant leakages.', icon: Key }
+                ].map((item, idx) => (
+                  <div key={idx} className="p-6 rounded-3xl bg-white/[0.01] border border-white/5 hover:border-white/10 transition-colors flex gap-4 items-start text-left">
+                    <div className="h-10 w-10 rounded-xl bg-teal-500/10 border border-teal-500/15 text-teal-400 flex items-center justify-center shrink-0">
+                      <item.icon className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-white uppercase tracking-wider">{item.title}</h4>
+                      <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">{item.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+
+          {/* FAQ ACCORDION SECTION (10 questions) */}
+          <section className="relative z-10 py-24 border-b border-white/5 bg-transparent" id="faq">
+            <div className="mx-auto max-w-[1440px] px-6 sm:px-8 lg:px-12 w-full grid gap-16 lg:grid-cols-[1fr_2fr] items-start">
+              <div className="space-y-4 text-left">
+                <span className="text-xs uppercase font-extrabold tracking-[0.2em] text-secondary-500">FAQ</span>
+                <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight leading-[1.15]">
+                  Common Questions & Troubleshooting
+                </h2>
+                <p className="text-slate-400 text-sm sm:text-base leading-relaxed">
+                  Quick answers concerning data encryption protocols, refund options, and household sync accounts.
+                </p>
+              </div>
+
+              {/* Accordions */}
+              <div className="space-y-4 bg-white/[0.01] border border-white/5 p-6 rounded-3xl">
+                <FaqItem
+                  question="How is my financial data secured?"
+                  answer="Expenso employs military-grade AES-256 database encryption. All API paths verify JWT access tokens, and Supabase enforces strict Row-Level Security (RLS) to keep entries isolated."
+                />
+                <FaqItem
+                  question="Does Expenso sell my transaction data?"
+                  answer="Absolutely not. We generate revenue solely through Pro subscription tiers. Your ledger is fully private and is never sold, analyzed, or shared with third parties."
+                />
+                <FaqItem
+                  question="How does the AI Categorization feature work?"
+                  answer="When you create an expense, our machine learning categorizer parses the merchant name against thousands of known records to assign categories instantly."
+                />
+                <FaqItem
+                  question="How accurate is the Receipt OCR Scanner?"
+                  answer="Our OCR engine achieves up to 99% accuracy on standard printed receipt bills. It scans amounts, dates, and matches categories automatically."
+                />
+                <FaqItem
+                  question="Can I synchronize multiple partner wallets?"
+                  answer="Yes! Under our Family Hub Pro tier, couples can synchronize partner wallets, log entries under a shared family budget limit, and review combined records."
+                />
+                <FaqItem
+                  question="What are Workspace isolations?"
+                  answer="Workspaces let you separate personal spending categories from business expenditures. You can set independent limits, view department logs, and export audited reports."
+                />
+                <FaqItem
+                  question="Is my data compliant with GDPR privacy laws?"
+                  answer="Yes, we are fully GDPR compliant. You can request a ZIP data archive download at any time or schedule account deletes (which occur after a 30-day delay)."
+                />
+                <FaqItem
+                  question="What is the difference between Free and Pro?"
+                  answer="The Free tier tracks up to 200 personal expenses. Pro adds unlimited logging, full-access OCR receipt uploads, partner wallets, and AI savings insights."
+                />
+                <FaqItem
+                  question="Can I self-host Expenso?"
+                  answer="Currently, Expenso is hosted as a secure cloud SaaS product to ensure seamless AI features, OCR scans, and background database syncing."
+                />
+                <FaqItem
+                  question="How can I request support?"
+                  answer="You can fill out our Contact form, email us at support@expensetracker.com, or check out our knowledge base articles inside the help center."
+                />
+              </div>
+            </div>
+          </section>
+
+          {/* PREMIUM CALL TO ACTION (CTA) SECTION */}
+          <section className="relative z-10 py-24 border-b border-white/5 bg-transparent">
+            <div className="mx-auto max-w-5xl px-6 sm:px-8 lg:px-12 w-full">
+              <div className="relative rounded-3xl overflow-hidden p-8 sm:p-12 text-center bg-gradient-to-tr from-purple-900/40 via-indigo-950/40 to-cyan-950/20 border border-white/10 shadow-2xl">
+                {/* Floating particle animations */}
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-64 w-64 rounded-full bg-primary-500/10 blur-3xl pointer-events-none" />
+
+                <div className="max-w-2xl mx-auto space-y-6 relative z-10">
+                  <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+                    Establish Control Over Your Outflow
+                  </h2>
+                  <p className="text-slate-400 text-xs sm:text-sm leading-relaxed max-w-lg mx-auto">
+                    Sign up today to start logging expenses, tracking family budgets, and unlocking automatic AI insights.
                   </p>
-
-                  {/* Coordinates List */}
-                  <div className="grid gap-2.5 sm:grid-cols-2 text-left">
-                    <div className="flex items-center gap-2 text-slate-300 text-xs">
-                      <Mail className="h-4 w-4 text-slate-500 flex-shrink-0" />
-                      <span>hiten@expensetracker.com</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-slate-300 text-xs">
-                      <Phone className="h-4 w-4 text-slate-500 flex-shrink-0" />
-                      <span>+91 98765 43210</span>
-                    </div>
-                  </div>
-
-                  {/* Founder Social Links */}
-                  <div className="flex justify-center sm:justify-start gap-4 pt-2">
-                    <a
-                      href="https://linkedin.com"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all border border-white/5"
+                  <div className="flex flex-col gap-4 sm:flex-row justify-center pt-4">
+                    <Link to="/register">
+                      <Button className="w-full sm:w-auto shadow-[0_0_24px_rgba(99,102,241,0.3)] bg-gradient-to-r from-primary-500 to-primary-600">Start Free Trial</Button>
+                    </Link>
+                    <button
+                      onClick={() => setDemoOpen(true)}
+                      className="w-full sm:w-auto px-6 py-3 rounded-xl border border-white/10 bg-white/5 text-xs text-white font-bold tracking-wide cursor-pointer hover:bg-white/10 transition-colors"
                     >
-                      <Linkedin className="h-4.5 w-4.5" />
-                    </a>
-                    <a
-                      href="https://github.com"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all border border-white/5"
-                    >
-                      <Github className="h-4.5 w-4.5" />
-                    </a>
+                      Watch Demo Video
+                    </button>
                   </div>
                 </div>
-              </motion.div>
+              </div>
             </div>
           </section>
 
           {/* CONTACT SECTION */}
-          <section className="relative z-10 py-24 border-t border-white/5 bg-transparent" id="contact">
+          <section className="relative z-10 py-24 border-b border-white/5 bg-transparent" id="contact">
             <div className="mx-auto max-w-[1440px] px-6 sm:px-8 lg:px-12 w-full">
               <div className="grid gap-16 lg:grid-cols-2 items-start">
                 <div className="space-y-8">
@@ -1185,19 +1635,6 @@ export function HomePage() {
                         <p className="text-slate-400 text-xs sm:text-sm mt-1">
                           General support: support@expensetracker.com
                         </p>
-                      </div>
-                    </div>
-
-                    <div className="flex gap-4 items-start">
-                      <div className="h-10 w-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-primary-400 flex-shrink-0">
-                        <HelpCircle className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <h4 className="text-sm font-bold text-white uppercase tracking-wider">Help Center</h4>
-                        <a href="#help" className="text-xs sm:text-sm text-primary-400 hover:text-primary-300 font-semibold flex items-center gap-1 mt-1 transition-colors">
-                          Explore our knowledge database
-                          <ArrowRight className="h-3.5 w-3.5" />
-                        </a>
                       </div>
                     </div>
                   </div>
@@ -1260,7 +1697,7 @@ export function HomePage() {
                     </div>
 
                     <Button type="submit" className="w-full mt-2 justify-center">
-                      {formSubmitted ? 'Message Transmitted Successfully!' : 'Send Message'}
+                      {formSubmitted ? 'Message Transmitted!' : 'Send Message'}
                     </Button>
                   </form>
                 </div>
@@ -1271,16 +1708,14 @@ export function HomePage() {
         </div>
       </div>
 
-      {/* FOOTER */}
+      {/* ROBUST MULTI-COLUMN FOOTER */}
       <footer className="relative z-10 py-16 border-t border-white/5 bg-bg-dark">
         <div className="mx-auto max-w-[1440px] px-6 sm:px-8 lg:px-12 w-full space-y-12">
           <div className="grid gap-8 sm:grid-cols-2 md:grid-cols-4">
             <div className="space-y-4">
-              <div className="flex items-center gap-2 select-none">
-                <span className="text-base font-black bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">
-                  Expense Tracker
-                </span>
-              </div>
+              <span className="text-base font-mono tracking-[0.15em] font-black bg-gradient-to-r from-[#06B6D4] via-[#8B5CF6] to-[#EC4899] bg-clip-text text-transparent">
+                Expenso
+              </span>
               <p className="text-xs text-slate-500 leading-relaxed max-w-xs">
                 A premium, modern SaaS product styled with dark glassmorphic components for personal and household bookkeeping.
               </p>
@@ -1290,26 +1725,27 @@ export function HomePage() {
               <h4 className="text-xs font-bold text-white uppercase tracking-wider">Product</h4>
               <ul className="space-y-2 text-xs text-slate-400">
                 <li><a href="#features" className="hover:text-white transition-colors">Features</a></li>
-                <li><a href="#about" className="hover:text-white transition-colors">How it works</a></li>
-                <li><a href="#pricing" className="hover:text-white transition-colors">Pricing Mockups</a></li>
+                <li><a href="#showcase" className="hover:text-white transition-colors">Showcase Previews</a></li>
+                <li><a href="#pricing" className="hover:text-white transition-colors">Pricing Options</a></li>
+                <li><a href="#security" className="hover:text-white transition-colors">Security Details</a></li>
               </ul>
             </div>
 
             <div className="space-y-3">
-              <h4 className="text-xs font-bold text-white uppercase tracking-wider">Support</h4>
+              <h4 className="text-xs font-bold text-white uppercase tracking-wider">Resources</h4>
               <ul className="space-y-2 text-xs text-slate-400">
                 <li><a href="#contact" className="hover:text-white transition-colors">Contact Center</a></li>
-                <li><a href="#help" className="hover:text-white transition-colors">Help Articles</a></li>
-                <li><a href="#api" className="hover:text-white transition-colors">System Status</a></li>
+                <li><a href="#faq" className="hover:text-white transition-colors">Help FAQ</a></li>
+                <li><span className="text-slate-600 cursor-default">System Status: 99.9% Uptime</span></li>
               </ul>
             </div>
 
             <div className="space-y-3">
               <h4 className="text-xs font-bold text-white uppercase tracking-wider">Legal</h4>
               <ul className="space-y-2 text-xs text-slate-400">
-                <li><a href="#terms" className="hover:text-white transition-colors">Terms of Service</a></li>
-                <li><a href="#privacy" className="hover:text-white transition-colors">Privacy Policy</a></li>
-                <li><a href="#security" className="hover:text-white transition-colors">Security Details</a></li>
+                <li><span className="text-slate-500">Terms of Service</span></li>
+                <li><span className="text-slate-500">Privacy Policy</span></li>
+                <li><span className="text-slate-500">GDPR Compliant</span></li>
               </ul>
             </div>
           </div>
@@ -1317,7 +1753,7 @@ export function HomePage() {
           <div className="h-[1px] bg-white/5 w-full" />
 
           <div className="flex flex-col sm:flex-row justify-between items-center gap-4 text-[10px] text-slate-600 font-bold uppercase tracking-widest">
-            <span>© 2026 Expense Tracker Inc. All rights reserved.</span>
+            <span>© 2026 Expenso Inc. All rights reserved.</span>
             <div className="flex gap-4">
               <a href="https://github.com" target="_blank" rel="noreferrer" className="hover:text-white transition-colors">GitHub</a>
               <a href="https://linkedin.com" target="_blank" rel="noreferrer" className="hover:text-white transition-colors">LinkedIn</a>
@@ -1353,7 +1789,7 @@ export function HomePage() {
 
               <div className="space-y-6">
                 <div>
-                  <h3 className="text-xl font-extrabold text-white tracking-tight">Interactive Platform Demo Walkthrough</h3>
+                  <h3 className="text-xl font-extrabold text-white tracking-tight">Interactive Platform Demo</h3>
                   <p className="text-xs text-slate-500 mt-1">Brief look inside our SaaS financial dashboard capabilities.</p>
                 </div>
 

@@ -144,10 +144,11 @@ export function TextReveal({
   const containerRef = useRef<HTMLHeadingElement>(null);
   const isInView = useInView(containerRef, { once, margin: '0px 0px -60px 0px' });
 
-  const tokens = useMemo(
-    () => (splitByWord ? text.split(' ') : text.split('')),
-    [text, splitByWord]
-  );
+  const words = useMemo(() => text.split(' '), [text]);
+  const totalLength = useMemo(() => {
+    if (splitByWord) return words.length;
+    return text.length;
+  }, [text, splitByWord, words]);
 
   const charVariants = {
     hidden: {
@@ -179,6 +180,8 @@ export function TextReveal({
     />
   );
 
+  let globalCharIndex = 0;
+
   return (
     <div className={cn('relative group', className)}>
       {/* Screen-reader text (full string, not split) */}
@@ -195,25 +198,54 @@ export function TextReveal({
       >
         <GlowHalo />
 
-        {tokens.map((token, i) => (
-          <motion.span
-            key={i}
-            custom={i}
-            initial="hidden"
-            animate={isInView ? 'visible' : 'hidden'}
-            variants={charVariants}
-            className="inline-block"
-            // Adds space back between words when splitting by word
-            style={splitByWord && i < tokens.length - 1 ? { marginRight: '0.25em' } : undefined}
-          >
-            <MagneticChar
-              char={token}
-              variant={variant}
-              charClassName={charClassName}
-              noMagnetic={noMagnetic}
-            />
-          </motion.span>
-        ))}
+        {splitByWord ? (
+          words.map((word, i) => (
+            <motion.span
+              key={i}
+              custom={i}
+              initial="hidden"
+              animate={isInView ? 'visible' : 'hidden'}
+              variants={charVariants}
+              className="inline-block"
+              style={i < words.length - 1 ? { marginRight: '0.25em' } : undefined}
+            >
+              <MagneticChar
+                char={word}
+                variant={variant}
+                charClassName={charClassName}
+                noMagnetic={noMagnetic}
+              />
+            </motion.span>
+          ))
+        ) : (
+          words.map((word, wordIdx) => (
+            <span key={wordIdx} className="inline-block whitespace-nowrap">
+              {word.split('').map((char) => {
+                const charIdx = globalCharIndex++;
+                return (
+                  <motion.span
+                    key={charIdx}
+                    custom={charIdx}
+                    initial="hidden"
+                    animate={isInView ? 'visible' : 'hidden'}
+                    variants={charVariants}
+                    className="inline-block"
+                  >
+                    <MagneticChar
+                      char={char}
+                      variant={variant}
+                      charClassName={charClassName}
+                      noMagnetic={noMagnetic}
+                    />
+                  </motion.span>
+                );
+              })}
+              {wordIdx < words.length - 1 && (
+                <span className="inline-block">&nbsp;</span>
+              )}
+            </span>
+          ))
+        )}
       </h1>
 
       {subtitle && (
@@ -222,7 +254,7 @@ export function TextReveal({
           animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
           transition={{
             duration: 0.5,
-            delay: startDelay + tokens.length * stagger + 0.1,
+            delay: startDelay + totalLength * stagger + 0.1,
             ease: 'easeOut',
           }}
           className="mt-1.5 text-sm text-foreground/55 font-normal"

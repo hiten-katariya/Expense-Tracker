@@ -8,14 +8,13 @@ import { useUIStore } from '@/stores/uiStore';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import {
-  User, Shield, Bell, Moon, Sun, Globe, Loader,
-  CheckCircle2, XCircle, Smartphone, LogOut, Trash2,
-} from 'lucide-react';
+import { User, Shield, Bell, Moon, Sun, Globe, Loader, CheckCircle2, XCircle, Smartphone, LogOut, Trash2, Download, ShieldAlert } from 'lucide-react';
 import { CURRENCIES } from '@/types';
 import { supabase, updateProfile } from '@/lib/supabase';
 import { cn, sanitizeName } from '@/lib/utils';
 import { SafeAvatar } from '@/components/Avatar';
+import { Modal } from '@/components/Modal';
+import { toast } from 'sonner';
 
 const profileSchema = z.object({
   full_name: z.string().min(2, 'Name must be at least 2 characters').optional().nullable(),
@@ -109,6 +108,82 @@ export function SettingsPage() {
   });
   const [isLoadingPrefs, setIsLoadingPrefs] = useState(true);
   const [showEmailPrefs, setShowEmailPrefs] = useState(false);
+
+  // GDPR and Deletion states
+  const [isExporting, setIsExporting] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [deleteReason, setDeleteReason] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleExportData = async () => {
+    setIsExporting(true);
+    const toastId = toast.loading('Compiling your GDPR data archive. Please wait...');
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch('/api/gdpr/export', {
+        headers: {
+          Authorization: `Bearer ${session?.access_token || ''}`,
+        },
+      });
+
+      if (!response.ok) throw new Error('Failed to generate export file');
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `gdpr_export_${user?.id || 'data'}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      toast.success('Your data export is ready and downloading!', { id: toastId });
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to export GDPR data archive', { id: toastId });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!confirmPassword.trim()) {
+      toast.error('Password is required to confirm deletion.');
+      return;
+    }
+    setIsDeleting(true);
+    const toastId = toast.loading('Verifying identity and scheduling soft deletion...');
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch('/api/gdpr/delete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token || ''}`,
+        },
+        body: JSON.stringify({ password: confirmPassword, reason: deleteReason }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to schedule deletion.');
+      }
+
+      toast.success('Account scheduled for permanent deletion in 30 days! Logging out...', { id: toastId });
+      setIsDeleteModalOpen(false);
+      setConfirmPassword('');
+      setDeleteReason('');
+      
+      setTimeout(() => {
+        signOut();
+      }, 3000);
+    } catch (err: any) {
+      toast.error(err.message || 'Verification failed. Please check your password.', { id: toastId });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   useEffect(() => {
     async function fetchPreferences() {
@@ -408,8 +483,28 @@ export function SettingsPage() {
         </div>
       </SectionCard>
 
+      {/* GDPR Data Center */}
+      <SectionCard title="GDPR & Data Privacy" icon={<Shield className="h-4 w-4" />} description="Manage your data rights and privacy configurations" delay={4}>
+        <SettingRow
+          icon={<Download className="h-4 w-4" />}
+          title="Download Personal Data Archive"
+          description="Download a structured ZIP containing all your expenses, budgets, profile settings, and system activities in CSV and JSON formats."
+          action={
+            <Button
+              size="sm"
+              variant="secondary"
+              leftIcon={<Download className="h-3.5 w-3.5" />}
+              onClick={handleExportData}
+              disabled={isExporting}
+            >
+              {isExporting ? 'Exporting...' : 'Request Export'}
+            </Button>
+          }
+        />
+      </SectionCard>
+
       {/* Danger Zone */}
-      <SectionCard title="Danger Zone" icon={<Trash2 className="h-4 w-4" />} description="Irreversible and destructive actions" delay={4} danger>
+      <SectionCard title="Danger Zone" icon={<Trash2 className="h-4 w-4" />} description="Irreversible and destructive actions" delay={5} danger>
         <SettingRow
           icon={<LogOut className="h-4 w-4" />}
           title="Sign Out Other Devices"
@@ -422,7 +517,7 @@ export function SettingsPage() {
           title="Delete Account"
           description="Permanently delete your profile and erase all data. This cannot be undone."
           action={
-            <Button size="sm" variant="danger" className="gap-1.5">
+            <Button size="sm" variant="danger" className="gap-1.5" onClick={() => setIsDeleteModalOpen(true)}>
               <Trash2 className="h-3.5 w-3.5" /> Delete Account
             </Button>
           }
@@ -430,9 +525,59 @@ export function SettingsPage() {
         />
       </SectionCard>
 
+      {/* Delete Account Modal */}
+      <Modal isOpen={isDeleteModalOpen} onClose={() => { setIsDeleteModalOpen(false); setConfirmPassword(''); setDeleteReason(''); }} title="Verify Password to Delete Account">
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs">
+            <ShieldAlert className="h-5 w-5 shrink-0 mt-0.5" />
+            <p>
+              <strong>Critical Action:</strong> Scheduling account deletion soft-deletes your account details for 30 days. You will be logged out immediately. All expenses, budgets, and links will be permanently deleted after this period, and your audit trails will be fully anonymized.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-foreground/75">Please confirm your password to proceed:</label>
+            <Input
+              type="password"
+              placeholder="Enter your current password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="bg-foreground/[0.02]"
+              disabled={isDeleting}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-foreground/75">Feedback / Reason for leaving (optional):</label>
+            <Input
+              type="textarea"
+              placeholder="Please let us know how we can improve..."
+              value={deleteReason}
+              onChange={(e) => setDeleteReason(e.target.value)}
+              className="bg-foreground/[0.02]"
+              disabled={isDeleting}
+            />
+          </div>
+
+          <div className="flex items-center gap-3 pt-4 justify-end">
+            <Button variant="secondary" onClick={() => { setIsDeleteModalOpen(false); setConfirmPassword(''); setDeleteReason(''); }} disabled={isDeleting}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              disabled={!confirmPassword.trim() || isDeleting}
+              onClick={handleDeleteAccount}
+              isLoading={isDeleting}
+            >
+              Schedule Deletion
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
       {/* Footer */}
       <p className="text-center text-xs text-foreground/30 pt-4">
-        Expense Tracker · Version 1.0 · <a href="#" className="hover:text-foreground/60 transition-colors">Privacy Policy</a> · <a href="#" className="hover:text-foreground/60 transition-colors">Terms</a>
+        Expenso · Version 1.0 · <a href="#" className="hover:text-foreground/60 transition-colors">Privacy Policy</a> · <a href="#" className="hover:text-foreground/60 transition-colors">Terms</a>
       </p>
     </div>
   );

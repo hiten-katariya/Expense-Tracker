@@ -2,6 +2,9 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
+import crypto from 'crypto';
+import helmet from 'helmet';
+import { rateLimit } from 'express-rate-limit';
 import { createClient } from '@supabase/supabase-js';
 import { startEmailQueueWorker } from './email/email.queue.js';
 import { startNotificationWorker } from './email/notification.worker.js';
@@ -25,24 +28,154 @@ import { getBudgetRecommendations } from './services/budget.service.js';
 import { semanticSearchExpenses, updateExpenseEmbedding } from './services/embedding.service.js';
 import { runGeminiPrompt } from './services/gemini.service.js';
 
+import { logAuditEvent } from './services/audit.service.js';
+import { generateGdprExport, scheduleGdprSoftDelete, verifyUserPassword, runGdprDeletionSweep, runAuditLogsRetentionSweep } from './services/gdpr.service.js';
+import { recordRequestMetrics, recordSlowQuery, recordJavascriptError, getPerformanceHealthStats } from './services/performance.service.js';
+
 // Load environment variables from the root .env.local file
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 
 const app = express();
 const port = process.env.PORT || 3001;
 
-app.use(cors());
+// ── Rate Limiters ──
+const globalLimiter = rateLimit({
+  windowMs: 900000, // 15 minutes
+  max: 200,
+  message: { error: 'Too many requests from this IP, please try again after 15 minutes' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const authLimiter = rateLimit({
+  windowMs: 900000,
+  max: 20,
+  message: { error: 'Too many authentication attempts from this IP, please try again after 15 minutes' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const uploadLimiter = rateLimit({
+  windowMs: 3600000, // 1 hour
+  max: 30,
+  message: { error: 'Too many upload attempts from this IP, please try again after 1 hour' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const aiLimiter = rateLimit({
+  windowMs: 3600000,
+  max: 100,
+  message: { error: 'Too many AI requests from this IP, please try again after 1 hour' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const familyInviteLimiter = rateLimit({
+  windowMs: 3600000,
+  max: 25,
+  message: { error: 'Too many family invitation requests, please try again after 1 hour' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Apply rate limiters
+app.use('/api/', globalLimiter);
+app.use('/api/auth/', authLimiter);
+app.use('/api/receipts/upload', uploadLimiter);
+app.use('/api/ai/scan-receipt', uploadLimiter);
+app.use('/api/ai/', aiLimiter);
+app.use('/api/families/invite', familyInviteLimiter);
+
+// ── Security Headers (Helmet & CORS) ──
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      imgSrc: ["'self'", "data:", "https://*.supabase.co", "https://expenso.dev"],
+      connectSrc: ["'self'", "https://*.supabase.co", "wss://*.supabase.co", "https://api.resend.com"],
+    },
+  },
+  xssFilter: true,
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true,
+  },
+}));
+
+app.use(cors({
+  origin: process.env.APP_URL || 'http://localhost:5173',
+  credentials: true,
+}));
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 
+                           process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || 
+                           process.env.SERVICE_ROLE_KEY || 
+                           supabaseAnonKey;
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.error('❌ Error: Supabase URL and Anon Key are required in environment.');
 }
 
 const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '');
+const supabaseAdmin = createClient(supabaseUrl || '', supabaseServiceKey || '');
+
+// ── Request Logger & Performance Monitoring Middleware ──
+app.use((req, res, next) => {
+  const startTime = Date.now();
+  
+  res.on('finish', () => {
+    const duration = Date.now() - startTime;
+    recordRequestMetrics(duration, res.statusCode);
+    console.log(`[REQUEST] ${req.method} ${req.path} - Status: ${res.statusCode} - Duration: ${duration}ms`);
+  });
+  
+  next();
+});
+
+// ── Global JWT Route Protection Middleware ──
+const allowPublicRoutes = [
+  '/api/auth/login',
+  '/api/auth/register',
+  '/api/auth/verify-email',
+  '/api/auth/reset-password',
+  '/api/health',
+];
+
+app.use(async (req, res, next) => {
+  if (allowPublicRoutes.includes(req.path) || !req.path.startsWith('/api/')) {
+    return next();
+  }
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Unauthorized: Missing or invalid token' });
+  }
+
+  const token = authHeader.split(' ')[1];
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    if (error || !user) {
+      return res.status(401).json({ error: 'Unauthorized: Invalid or expired token' });
+    }
+    (req as any).user = user;
+    (req as any).token = token;
+    next();
+  } catch (err) {
+    console.error('JWT verification middleware error:', err);
+    return res.status(401).json({ error: 'Unauthorized: Invalid token' });
+  }
+});
+
 
 // --- AUTH / EMAIL VERIFICATION ROUTES ---
 
@@ -152,6 +285,9 @@ app.post('/api/test/family-invite', async (req, res) => {
 // --- AUTHENTICATION & USER-SCOPED CLIENT HELPERS ---
 
 const authenticateUser = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if ((req as any).user && (req as any).token) {
+    return next();
+  }
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Unauthorized: Missing or invalid token' });
@@ -230,6 +366,16 @@ app.post('/api/families', authenticateUser, async (req, res) => {
       return res.status(500).json({ error: error.message });
     }
 
+    await logAuditEvent({
+      userId: user.id,
+      familyId: data.id,
+      entityType: 'family',
+      entityId: data.id,
+      eventType: 'family_created',
+      newValue: data,
+      req,
+    });
+
     return res.status(201).json({ data });
   } catch (err) {
     console.error('Create family error:', err);
@@ -294,6 +440,16 @@ app.post('/api/families/invite', authenticateUser, async (req, res) => {
     const inviteUrl = `${process.env.APP_URL || 'http://localhost:5173'}/family/invites?token=${invite.invite_token}`;
     
     await sendFamilyInviteEmail(email, inviterName, invite.family.name, inviteUrl);
+
+    await logAuditEvent({
+      userId: user.id,
+      familyId,
+      entityType: 'family_invite',
+      entityId: invite.id,
+      eventType: 'family_member_added',
+      newValue: invite,
+      req,
+    });
 
     return res.status(200).json({ message: 'Invitation sent successfully', data: invite });
   } catch (err) {
@@ -606,6 +762,15 @@ app.delete('/api/families/:familyId/members/:memberId', authenticateUser, async 
         entity_type: 'profile',
         entity_id: memberId
       });
+
+    await logAuditEvent({
+      userId: (req as any).user.id,
+      familyId,
+      entityType: 'family_member',
+      entityId: memberId,
+      eventType: 'family_member_removed',
+      req,
+    });
 
     return res.status(200).json({ message: 'Member removed successfully' });
   } catch (err) {
@@ -1274,6 +1439,15 @@ app.put('/api/email/preferences', authenticateUser, async (req, res) => {
       return res.status(500).json({ error: error.message });
     }
 
+    await logAuditEvent({
+      userId: user.id,
+      entityType: 'profile',
+      entityId: user.id,
+      eventType: 'profile_updated',
+      newValue: data,
+      req,
+    });
+
     return res.status(200).json({ data });
   } catch (error) {
     console.error('Preferences PUT route error:', error);
@@ -1517,6 +1691,191 @@ app.post('/api/test/all-email-templates', authenticateUser, async (req, res) => 
     return res.status(500).json({ error: error.message || 'Internal failure enqueuing all templates.' });
   }
 });
+
+// --- GDPR COMPLIANCE ENDPOINTS ---
+
+// GET /api/gdpr/export - Initiates a structured download of all personal user data as JSON & CSV in a ZIP archive
+app.get('/api/gdpr/export', authenticateUser, async (req, res) => {
+  const user = (req as any).user;
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename=gdpr_export_${user.id}.zip`);
+  
+  try {
+    // Record gdpr_exported_at
+    await supabaseAdmin
+      .from('profiles')
+      .update({ gdpr_exported_at: new Date().toISOString() })
+      .eq('id', user.id);
+
+    await generateGdprExport(user.id, res);
+    await logAuditEvent({
+      userId: user.id,
+      entityType: 'gdpr',
+      entityId: user.id,
+      eventType: 'profile_updated',
+      newValue: { action: 'gdpr_data_exported' },
+      req,
+    });
+  } catch (err) {
+    console.error('GDPR export failed:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to generate GDPR data export archive.' });
+    }
+  }
+});
+
+// POST /api/gdpr/delete - Checks credentials and schedules account soft deletion with a 30-day delay
+app.post('/api/gdpr/delete', authenticateUser, async (req, res) => {
+  const user = (req as any).user;
+  const { password, reason } = req.body;
+
+  if (!password) {
+    return res.status(400).json({ error: 'Password confirmation is required.' });
+  }
+
+  const isValidPassword = await verifyUserPassword(user.email, password);
+  if (!isValidPassword) {
+    return res.status(401).json({ error: 'Incorrect password. Verification failed.' });
+  }
+
+  const success = await scheduleGdprSoftDelete(user.id, reason, user.id);
+  if (success) {
+    await logAuditEvent({
+      userId: user.id,
+      entityType: 'user',
+      entityId: user.id,
+      eventType: 'profile_updated',
+      newValue: { action: 'scheduled_gdpr_soft_delete', reason },
+      req,
+    });
+    return res.status(200).json({ success: true, message: 'Your account has been scheduled for deletion. It will be permanently removed in 30 days.' });
+  } else {
+    return res.status(500).json({ error: 'Failed to schedule account deletion.' });
+  }
+});
+
+// --- PERFORMANCE & HEALTH ENDPOINTS ---
+
+// GET /api/performance/health - Returns comprehensive server CPU, memory, load, and query diagnostics
+app.get('/api/performance/health', authenticateUser, async (req, res) => {
+  const stats = getPerformanceHealthStats();
+  return res.status(200).json(stats);
+});
+
+// GET /api/health - Public health verification path
+app.get('/api/health', async (req, res) => {
+  return res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+
+// --- PRIVATE RECEIPT STORAGE ENDPOINTS ---
+
+// POST /api/receipts/upload - Stores scanned receipt uploads in private storage bucket and returns signed URL
+app.post('/api/receipts/upload', authenticateUser, async (req, res) => {
+  const { image, name } = req.body;
+  const user = (req as any).user;
+
+  if (!image) {
+    return res.status(400).json({ error: 'Receipt image string is required.' });
+  }
+
+  try {
+    const imageBuffer = Buffer.from(image, 'base64');
+    const fileHash = crypto.createHash('md5').update(imageBuffer).digest('hex');
+    const fileName = `${user.id}/${fileHash}_${name || 'receipt.png'}`;
+
+    // Upload to private Supabase Storage bucket 'receipts'
+    const { error: uploadError } = await supabaseAdmin.storage
+      .from('receipts')
+      .upload(fileName, imageBuffer, {
+        contentType: 'image/png',
+        upsert: true,
+      });
+
+    if (uploadError) {
+      console.error('Private Storage upload error:', uploadError);
+      return res.status(500).json({ error: 'Failed to upload image to private bucket.' });
+    }
+
+    // Generate signed URL with 3600 seconds (1 hour) expiration
+    const { data: signedData, error: signError } = await supabaseAdmin.storage
+      .from('receipts')
+      .createSignedUrl(fileName, 3600);
+
+    if (signError || !signedData?.signedUrl) {
+      console.error('Signed URL generation error:', signError);
+      return res.status(500).json({ error: 'Failed to generate signed URL for receipt.' });
+    }
+
+    return res.status(200).json({
+      success: true,
+      signedUrl: signedData.signedUrl,
+      storagePath: fileName,
+      bucket: 'receipts',
+      objectPath: fileName,
+      expiresAt: new Date(Date.now() + 3600 * 1000).toISOString(),
+      checksum: fileHash,
+      size: imageBuffer.length,
+    });
+  } catch (err) {
+    console.error('Receipt upload endpoint exception:', err);
+    return res.status(500).json({ error: 'Internal server error uploading receipt.' });
+  }
+});
+
+// POST /api/receipts/sign - Generates fresh signed URLs for receipt paths on-demand
+app.post('/api/receipts/sign', authenticateUser, async (req, res) => {
+  const { storagePath } = req.body;
+
+  if (!storagePath) {
+    return res.status(400).json({ error: 'Storage path is required.' });
+  }
+
+  try {
+    const { data: signedData, error: signError } = await supabaseAdmin.storage
+      .from('receipts')
+      .createSignedUrl(storagePath, 3600);
+
+    if (signError || !signedData?.signedUrl) {
+      return res.status(500).json({ error: 'Failed to refresh signed URL.' });
+    }
+
+    return res.status(200).json({
+      success: true,
+      signedUrl: signedData.signedUrl,
+    });
+  } catch (err) {
+    console.error('Receipt sign error:', err);
+    return res.status(500).json({ error: 'Internal signing error.' });
+  }
+});
+
+// --- USER AUDIT LOGS ENDPOINT ---
+
+// GET /api/audit-logs - Retrieves the audit history entries corresponding to the logged in user
+app.get('/api/audit-logs', authenticateUser, async (req, res) => {
+  const user = (req as any).user;
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('audit_logs')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return res.status(200).json({ data });
+  } catch (err: any) {
+    console.error('Error fetching audit logs:', err);
+    return res.status(500).json({ error: err.message || 'Failed to fetch audit logs.' });
+  }
+});
+
+// Initialize background sweep interval for soft deleted users and old audit logs (commences every 24 hours)
+setInterval(() => {
+  console.log('[CRON] Initiating GDPR deletion sweep...');
+  runGdprDeletionSweep();
+  console.log('[CRON] Initiating Audit Logs retention sweep...');
+  runAuditLogsRetentionSweep();
+}, 24 * 60 * 60 * 1000);
 
 // Initialize background workers
 startEmailQueueWorker();
