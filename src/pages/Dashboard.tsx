@@ -28,7 +28,7 @@ const fadeUp = {
   hidden: { opacity: 0, y: 28 },
   show: (i: number) => ({
     opacity: 1, y: 0,
-    transition: { duration: 0.5, delay: i * 0.07, ease: [0.22, 1, 0.36, 1] as [number,number,number,number] },
+    transition: { duration: 0.5, delay: i * 0.07, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] },
   }),
 };
 
@@ -58,11 +58,10 @@ function PremiumStatCard({
             {icon}
           </div>
           {trend && trendValue && (
-            <span className={`flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full ${
-              trend === 'up'
+            <span className={`flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full ${trend === 'up'
                 ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
                 : 'bg-red-500/10 text-red-600 dark:text-red-400'
-            }`}>
+              }`}>
               {trend === 'up' ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
               {trendValue}
             </span>
@@ -389,7 +388,7 @@ export function Dashboard() {
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)'} vertical={false} />
                 <XAxis dataKey="day" tick={{ fontSize: 10, fill: darkMode ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: darkMode ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)' }} axisLine={false} tickLine={false} tickFormatter={(v) => `₹${v >= 1000 ? `${(v/1000).toFixed(0)}k` : v}`} />
+                <YAxis tick={{ fontSize: 10, fill: darkMode ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)' }} axisLine={false} tickLine={false} tickFormatter={(v) => `₹${v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}`} />
                 <RechartsTooltip
                   formatter={(value: number) => [formatCurrency(value), 'Spent']}
                   contentStyle={tooltipStyle}

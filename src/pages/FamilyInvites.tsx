@@ -8,7 +8,7 @@ import { Input } from '@/components/Input';
 import { Modal } from '@/components/Modal';
 import { formatDate } from '@/lib/utils';
 import { useUIStore } from '@/stores/uiStore';
-import { Mail, CheckCircle2, XCircle, Clock, Plus, Loader2, Users, Crown } from 'lucide-react';
+import { Mail, CheckCircle2, XCircle, Clock, Plus, Loader2, Users, Crown, Copy, Check } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -34,6 +34,15 @@ export function FamilyInvitesPage() {
   const navigate = useNavigate();
 
   const [isInviteModalOpen, setIsInviteModalOpen] = React.useState(false);
+  const [copiedCode, setCopiedCode] = React.useState(false);
+
+  const handleCopyInviteCode = () => {
+    if (!activeFamily?.invite_code) return;
+    navigator.clipboard.writeText(activeFamily.invite_code);
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2000);
+    toast.success('Invite code copied to clipboard');
+  };
 
   const { data: families, isLoading: familiesLoading } = useFamilies(user?.id);
   const activeFamily = families?.[0];
@@ -233,7 +242,7 @@ export function FamilyInvitesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <TextReveal
             text="Family Invitations"
@@ -241,14 +250,28 @@ export function FamilyInvitesPage() {
             textSize="text-2xl"
           />
         </div>
-        {canInvite && (
-          <Button
-            leftIcon={<Plus className="h-4 w-4" />}
-            onClick={() => setIsInviteModalOpen(true)}
-          >
-            Invite Member
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-3 self-start sm:self-auto">
+          {activeFamily?.invite_code && (
+            <div className="flex items-center gap-2 bg-foreground/5 px-3 py-1.5 rounded-xl border border-foreground/10">
+              <span className="text-[10px] text-foreground/50 font-mono">Invite Code:</span>
+              <span className="text-xs font-mono font-bold text-foreground/80">{activeFamily.invite_code}</span>
+              <button
+                onClick={handleCopyInviteCode}
+                className="p-1 hover:bg-foreground/10 rounded transition-colors text-foreground/60"
+              >
+                {copiedCode ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+              </button>
+            </div>
+          )}
+          {canInvite && (
+            <Button
+              leftIcon={<Plus className="h-4 w-4" />}
+              onClick={() => setIsInviteModalOpen(true)}
+            >
+              Invite Member
+            </Button>
+          )}
+        </div>
       </div>
 
       <Card>

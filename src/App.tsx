@@ -38,22 +38,30 @@ import { NotificationsPage } from '@/pages/Notifications';
 import ForgotPasswordPage from '@/pages/ForgotPassword';
 import ResetPasswordPage from '@/pages/ResetPassword';
 
-// Admin Pages
-import { AdminLayout } from '@/components/AdminLayout';
-import AdminDashboard from '@/pages/admin/AdminDashboard';
-import AdminUsers from '@/pages/admin/AdminUsers';
-import AdminUserDetail from '@/pages/admin/AdminUserDetail';
-import AdminExpenses from '@/pages/admin/AdminExpenses';
-import AdminBudgets from '@/pages/admin/AdminBudgets';
-import AdminFamilies from '@/pages/admin/AdminFamilies';
-import AdminWorkspaces from '@/pages/admin/AdminWorkspaces';
-import AdminAIUsage from '@/pages/admin/AdminAIUsage';
-import AdminOCRUsage from '@/pages/admin/AdminOCRUsage';
-import AdminEmailLogs from '@/pages/admin/AdminEmailLogs';
-import AdminNotifications from '@/pages/admin/AdminNotifications';
-import AdminAuditLogs from '@/pages/admin/AdminAuditLogs';
-import AdminAnalytics from '@/pages/admin/AdminAnalytics';
-import AdminSystemHealth from '@/pages/admin/AdminSystemHealth';
+// Admin Pages — lazy-loaded so admin code is NEVER included in the main bundle.
+// These chunks are only downloaded after successful admin authentication.
+const LazyAdminLayout = React.lazy(() => import('@/components/AdminLayout').then(m => ({ default: m.AdminLayout })));
+const AdminDashboard = React.lazy(() => import('@/pages/admin/AdminDashboard'));
+const AdminUsers = React.lazy(() => import('@/pages/admin/AdminUsers'));
+const AdminUserDetail = React.lazy(() => import('@/pages/admin/AdminUserDetail'));
+const AdminExpenses = React.lazy(() => import('@/pages/admin/AdminExpenses'));
+const AdminBudgets = React.lazy(() => import('@/pages/admin/AdminBudgets'));
+const AdminFamilies = React.lazy(() => import('@/pages/admin/AdminFamilies'));
+const AdminWorkspaces = React.lazy(() => import('@/pages/admin/AdminWorkspaces'));
+const AdminAIUsage = React.lazy(() => import('@/pages/admin/AdminAIUsage'));
+const AdminOCRUsage = React.lazy(() => import('@/pages/admin/AdminOCRUsage'));
+const AdminEmailLogs = React.lazy(() => import('@/pages/admin/AdminEmailLogs'));
+const AdminNotifications = React.lazy(() => import('@/pages/admin/AdminNotifications'));
+const AdminAuditLogs = React.lazy(() => import('@/pages/admin/AdminAuditLogs'));
+const AdminAnalytics = React.lazy(() => import('@/pages/admin/AdminAnalytics'));
+const AdminSystemHealth = React.lazy(() => import('@/pages/admin/AdminSystemHealth'));
+
+// Suspense fallback for lazy-loaded admin chunks
+const AdminChunkFallback = () => (
+  <div className="min-h-screen bg-background flex items-center justify-center">
+    <div className="h-10 w-10 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
+  </div>
+);
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -188,7 +196,11 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return <AdminLayout>{children}</AdminLayout>;
+  return (
+    <React.Suspense fallback={<AdminChunkFallback />}>
+      <LazyAdminLayout>{children}</LazyAdminLayout>
+    </React.Suspense>
+  );
 }
 
 function AppRoutes() {
@@ -531,21 +543,21 @@ function AppRoutes() {
         }
       />
 
-      {/* Stealth Admin Routes — shows 404 for non-admins */}
-      <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
-      <Route path="/admin/users" element={<AdminRoute><AdminUsers /></AdminRoute>} />
-      <Route path="/admin/users/:id" element={<AdminRoute><AdminUserDetail /></AdminRoute>} />
-      <Route path="/admin/expenses" element={<AdminRoute><AdminExpenses /></AdminRoute>} />
-      <Route path="/admin/budgets" element={<AdminRoute><AdminBudgets /></AdminRoute>} />
-      <Route path="/admin/families" element={<AdminRoute><AdminFamilies /></AdminRoute>} />
-      <Route path="/admin/workspaces" element={<AdminRoute><AdminWorkspaces /></AdminRoute>} />
-      <Route path="/admin/ai-usage" element={<AdminRoute><AdminAIUsage /></AdminRoute>} />
-      <Route path="/admin/ocr-usage" element={<AdminRoute><AdminOCRUsage /></AdminRoute>} />
-      <Route path="/admin/email-logs" element={<AdminRoute><AdminEmailLogs /></AdminRoute>} />
-      <Route path="/admin/notifications" element={<AdminRoute><AdminNotifications /></AdminRoute>} />
-      <Route path="/admin/audit-logs" element={<AdminRoute><AdminAuditLogs /></AdminRoute>} />
-      <Route path="/admin/analytics" element={<AdminRoute><AdminAnalytics /></AdminRoute>} />
-      <Route path="/admin/system-health" element={<AdminRoute><AdminSystemHealth /></AdminRoute>} />
+      {/* Stealth Admin Routes — lazy-loaded, shows 404 for non-admins */}
+      <Route path="/admin" element={<AdminRoute><React.Suspense fallback={<AdminChunkFallback />}><AdminDashboard /></React.Suspense></AdminRoute>} />
+      <Route path="/admin/users" element={<AdminRoute><React.Suspense fallback={<AdminChunkFallback />}><AdminUsers /></React.Suspense></AdminRoute>} />
+      <Route path="/admin/users/:id" element={<AdminRoute><React.Suspense fallback={<AdminChunkFallback />}><AdminUserDetail /></React.Suspense></AdminRoute>} />
+      <Route path="/admin/expenses" element={<AdminRoute><React.Suspense fallback={<AdminChunkFallback />}><AdminExpenses /></React.Suspense></AdminRoute>} />
+      <Route path="/admin/budgets" element={<AdminRoute><React.Suspense fallback={<AdminChunkFallback />}><AdminBudgets /></React.Suspense></AdminRoute>} />
+      <Route path="/admin/families" element={<AdminRoute><React.Suspense fallback={<AdminChunkFallback />}><AdminFamilies /></React.Suspense></AdminRoute>} />
+      <Route path="/admin/workspaces" element={<AdminRoute><React.Suspense fallback={<AdminChunkFallback />}><AdminWorkspaces /></React.Suspense></AdminRoute>} />
+      <Route path="/admin/ai-usage" element={<AdminRoute><React.Suspense fallback={<AdminChunkFallback />}><AdminAIUsage /></React.Suspense></AdminRoute>} />
+      <Route path="/admin/ocr-usage" element={<AdminRoute><React.Suspense fallback={<AdminChunkFallback />}><AdminOCRUsage /></React.Suspense></AdminRoute>} />
+      <Route path="/admin/email-logs" element={<AdminRoute><React.Suspense fallback={<AdminChunkFallback />}><AdminEmailLogs /></React.Suspense></AdminRoute>} />
+      <Route path="/admin/notifications" element={<AdminRoute><React.Suspense fallback={<AdminChunkFallback />}><AdminNotifications /></React.Suspense></AdminRoute>} />
+      <Route path="/admin/audit-logs" element={<AdminRoute><React.Suspense fallback={<AdminChunkFallback />}><AdminAuditLogs /></React.Suspense></AdminRoute>} />
+      <Route path="/admin/analytics" element={<AdminRoute><React.Suspense fallback={<AdminChunkFallback />}><AdminAnalytics /></React.Suspense></AdminRoute>} />
+      <Route path="/admin/system-health" element={<AdminRoute><React.Suspense fallback={<AdminChunkFallback />}><AdminSystemHealth /></React.Suspense></AdminRoute>} />
 
       {/* Default Redirect */}
       <Route path="*" element={<Navigate to="/" replace />} />

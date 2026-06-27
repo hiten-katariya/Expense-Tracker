@@ -201,17 +201,37 @@ app.use(helmet({
       scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      imgSrc: ["'self'", "data:", "https://*.supabase.co", "https://expenso.dev"],
+      imgSrc: ["'self'", "data:", "https://*.supabase.co", "https://expenso.dev", "https://lh3.googleusercontent.com"],
       connectSrc: ["'self'", "https://*.supabase.co", "wss://*.supabase.co", "https://api.resend.com"],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+      frameAncestors: ["'none'"],
     },
   },
+  // X-Content-Type-Options: nosniff (prevents MIME type sniffing)
+  xContentTypeOptions: true,
+  // X-Frame-Options: DENY (prevents clickjacking)
+  frameguard: { action: 'deny' },
+  // Referrer-Policy: strict-origin-when-cross-origin
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+  // X-XSS-Protection
   xssFilter: true,
+  // Remove X-Powered-By
+  hidePoweredBy: true,
+  // HSTS: Strict Transport Security
   hsts: {
     maxAge: 31536000,
     includeSubDomains: true,
     preload: true,
   },
 }));
+
+// Permissions-Policy (not covered by Helmet — set manually)
+app.use((_req, res, next) => {
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), interest-cohort=()');
+  next();
+});
 
 app.use(cors({
   origin: process.env.APP_URL || 'http://localhost:5173',
@@ -242,7 +262,10 @@ app.use((req, res, next) => {
   res.on('finish', () => {
     const duration = Date.now() - startTime;
     recordRequestMetrics(duration, res.statusCode);
-    console.log(`[REQUEST] ${req.method} ${req.path} - Status: ${res.statusCode} - Duration: ${duration}ms`);
+    // Never log admin paths — prevents server log discovery
+    if (!req.path.includes('/admin')) {
+      console.log(`[REQUEST] ${req.method} ${req.path} - ${res.statusCode} - ${duration}ms`);
+    }
   });
   
   next();
@@ -260,21 +283,24 @@ app.use(async (req, res, next) => {
     return next();
   }
 
+  // Stealth: admin paths always get 404 for missing/invalid auth (never 401)
+  const isAdminPath = req.path.startsWith('/api/admin');
+
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Unauthorized: Missing or invalid token' });
+    return res.status(isAdminPath ? 404 : 401).json({ error: isAdminPath ? 'Not found' : 'Unauthorized: Missing or invalid token' });
   }
 
   const token = authHeader.split(' ')[1];
   try {
     const { data: { user }, error } = await supabase.auth.getUser(token);
     if (error || !user) {
-      return res.status(401).json({ error: 'Unauthorized: Invalid or expired token' });
+      return res.status(isAdminPath ? 404 : 401).json({ error: isAdminPath ? 'Not found' : 'Unauthorized: Invalid or expired token' });
     }
 
     // Force user email verification on protected API routes
     if (!user.email_confirmed_at) {
-      return res.status(403).json({ error: 'Forbidden: Email verification is required to access this resource.' });
+      return res.status(isAdminPath ? 404 : 403).json({ error: isAdminPath ? 'Not found' : 'Forbidden: Email verification is required to access this resource.' });
     }
 
     (req as any).user = user;
@@ -282,7 +308,7 @@ app.use(async (req, res, next) => {
     next();
   } catch (err) {
     console.error('JWT verification middleware error:', err);
-    return res.status(401).json({ error: 'Unauthorized: Invalid token' });
+    return res.status(isAdminPath ? 404 : 401).json({ error: isAdminPath ? 'Not found' : 'Unauthorized: Invalid token' });
   }
 });
 
@@ -1988,65 +2014,50 @@ app.get('/api/audit-logs', authenticateUser, async (req, res) => {
 // Admin middleware: dual-gate (email whitelist + database is_admin). Always returns 404 for unauthorized.
 async function requireAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
   const user = (req as any).user;
-  console.log('[ADMIN DEBUG] requireAdmin called for path:', req.path);
-  console.log('[ADMIN DEBUG] user present:', !!user, '| user.email:', user?.email);
-
-  if (!user) {
-    console.log('[ADMIN DEBUG] ❌ BLOCKED: no user on request');
-    return res.status(404).json({ error: 'Not found' });
-  }
+  if (!user) return res.status(404).json({ error: 'Not found' });
 
   // Gate 1: Email whitelist (case-insensitive)
   const adminEmail = process.env.ADMIN_EMAIL;
-  console.log('[ADMIN DEBUG] Gate 1 — ADMIN_EMAIL env:', adminEmail, '| user.email:', user.email);
   if (!adminEmail || user.email?.toLowerCase() !== adminEmail.toLowerCase()) {
-    console.log('[ADMIN DEBUG] ❌ BLOCKED at Gate 1: email mismatch');
     logAuditEvent({
       userId: user.id, entityType: 'admin_access', entityId: null,
       eventType: 'admin_access_denied', req,
-      newValue: { reason: 'email_mismatch', attempted_email: user.email }
+      newValue: { reason: 'email_mismatch' }
     });
     return res.status(404).json({ error: 'Not found' });
   }
-  console.log('[ADMIN DEBUG] ✅ Gate 1 passed');
 
   // Gate 2: Database role check via service role
   try {
     const { data: profile, error } = await supabaseAdmin
       .from('profiles').select('is_admin').eq('id', user.id).single();
 
-    console.log('[ADMIN DEBUG] Gate 2 — DB result:', { profile, error: error?.message });
-
     if (error) {
-      console.log('[ADMIN DEBUG] ❌ BLOCKED at Gate 2: DB error:', error.message);
       return res.status(404).json({ error: 'Not found' });
     }
 
     if (!profile?.is_admin) {
-      console.log('[ADMIN DEBUG] is_admin is false — auto-promoting...');
+      // Auto-promote: email already verified by Gate 1, safe to set is_admin
       const { error: promoteError } = await supabaseAdmin
         .from('profiles')
         .update({ is_admin: true })
         .eq('id', user.id);
 
       if (promoteError) {
-        console.error('[ADMIN DEBUG] ❌ Auto-promote failed:', promoteError);
+        console.error('[requireAdmin] Auto-promote failed:', promoteError.message);
         return res.status(404).json({ error: 'Not found' });
       }
 
-      console.log('[ADMIN DEBUG] ✅ Auto-promote succeeded');
       logAuditEvent({
         userId: user.id, entityType: 'admin_access', entityId: null,
         eventType: 'admin_auto_promoted', req,
-        newValue: { reason: 'email_matched_whitelist_auto_promoted' }
+        newValue: { reason: 'email_matched_whitelist' }
       });
     }
-  } catch (err) {
-    console.log('[ADMIN DEBUG] ❌ BLOCKED: exception in Gate 2:', err);
+  } catch {
     return res.status(404).json({ error: 'Not found' });
   }
 
-  console.log('[ADMIN DEBUG] ✅ ALL GATES PASSED — granting admin access for:', req.path);
   // Audit successful admin access
   logAuditEvent({
     userId: user.id, entityType: 'admin_access', entityId: null,
