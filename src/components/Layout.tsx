@@ -361,6 +361,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
         <div className="flex items-center gap-2">
           <IconButton
+            onClick={() => setChatPanelOpen(true)}
+            className="text-primary-600 dark:text-primary-400 hover:bg-primary-500/10 p-2 rounded-xl relative group"
+            title="Ask AI Assistant"
+          >
+            <Sparkles className="h-5 w-5 animate-pulse" />
+          </IconButton>
+          <IconButton
             onClick={toggleDarkMode}
             className="text-foreground/60 hover:text-foreground hover:bg-foreground/5 p-2 rounded-xl"
           >
@@ -506,7 +513,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         data-lenis-prevent
       >
         {/* Top Header Bar */}
-        <header className="sticky top-0 z-20 h-16 bg-card/75 dark:bg-background/45 backdrop-blur-xl border-b border-foreground/10 dark:border-white/5 select-none">
+        <header className="hidden lg:block sticky top-0 z-20 h-16 bg-card/75 dark:bg-background/45 backdrop-blur-xl border-b border-foreground/10 dark:border-white/5 select-none">
           <div className="w-full max-w-[1440px] mx-auto h-full flex items-center justify-between px-6 lg:px-8">
             <div className="flex-1 max-w-lg">
               <div className="relative group">
