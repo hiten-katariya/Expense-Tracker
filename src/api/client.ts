@@ -2,7 +2,11 @@ import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 
-export const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+const viteApiUrl = import.meta.env.VITE_API_URL;
+const cleanedApiUrl = viteApiUrl ? viteApiUrl.replace(/\/$/, '') : '';
+export const API_BASE_URL = cleanedApiUrl 
+  ? (cleanedApiUrl.endsWith('/api') ? cleanedApiUrl : `${cleanedApiUrl}/api`) 
+  : '/api';
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
