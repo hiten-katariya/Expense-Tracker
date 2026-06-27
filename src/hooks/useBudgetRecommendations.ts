@@ -9,7 +9,8 @@ export function useBudgetRecommendations(
     queryKey: ['budget-recommendations', userId, workspaceId],
     queryFn: async (): Promise<BudgetRecommendation[]> => {
       if (!userId) return [];
-      const response = await fetch('/api/ai/budget-recommendation', {
+      const API = import.meta.env.VITE_API_URL || '';
+      const response = await fetch(`${API}/api/ai/budget-recommendation`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, workspaceId }),

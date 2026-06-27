@@ -47,7 +47,8 @@ export default function VerifyEmail() {
         // Trigger welcome email via server endpoint (optional / nice to have)
         const latestUser = useAuthStore.getState().user;
         if (latestUser && latestUser.email) {
-          fetch('/api/test/welcome-email', {
+          const API = import.meta.env.VITE_API_URL || '';
+          fetch(`${API}/api/test/welcome-email`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email: latestUser.email, name: latestUser.user_metadata?.full_name || 'Valued User' }),

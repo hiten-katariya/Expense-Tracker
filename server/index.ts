@@ -234,7 +234,11 @@ app.use((_req, res, next) => {
 });
 
 app.use(cors({
-  origin: process.env.APP_URL || 'http://localhost:5173',
+  origin: [
+    "http://localhost:5173",
+    "https://your-app.vercel.app",
+    ...(process.env.APP_URL ? [process.env.APP_URL] : [])
+  ],
   credentials: true,
 }));
 

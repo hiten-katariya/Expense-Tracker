@@ -12,7 +12,8 @@ export function useAIInsights(
     queryKey: ['ai-insights', userId, month, year, workspaceId, familyId],
     queryFn: async (): Promise<AIInsight> => {
       if (!userId) throw new Error('User not logged in');
-      const response = await fetch('/api/ai/monthly-insights', {
+      const API = import.meta.env.VITE_API_URL || '';
+      const response = await fetch(`${API}/api/ai/monthly-insights`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, month, year, workspaceId, familyId }),

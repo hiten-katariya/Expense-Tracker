@@ -155,7 +155,8 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
         // Hit any admin endpoint — requireAdmin middleware will auto-promote
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.access_token) {
-          await fetch('/api/admin/stats', {
+          const API = import.meta.env.VITE_API_URL || '';
+          await fetch(`${API}/api/admin/stats`, {
             headers: { Authorization: `Bearer ${session.access_token}` },
           });
         }

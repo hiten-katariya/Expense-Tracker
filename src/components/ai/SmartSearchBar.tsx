@@ -33,7 +33,8 @@ export function SmartSearchBar({
 
     setIsLoading(true);
     try {
-      const response = await fetch('/api/ai/smart-search', {
+      const API = import.meta.env.VITE_API_URL || '';
+      const response = await fetch(`${API}/api/ai/smart-search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, queryText: query, limit: 20 }),

@@ -22,7 +22,8 @@ export function useReceiptOCR() {
       userId: string;
       categories: Array<{ id: string; name: string }>;
     }): Promise<ReceiptOCRResult> => {
-      const response = await fetch('/api/ai/scan-receipt', {
+      const API = import.meta.env.VITE_API_URL || '';
+      const response = await fetch(`${API}/api/ai/scan-receipt`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

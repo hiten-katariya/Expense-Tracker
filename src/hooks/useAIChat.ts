@@ -30,7 +30,8 @@ export function useAIChat(userId: string | undefined) {
       history: AIChatMessage[];
     }) => {
       if (!userId) throw new Error('User not logged in');
-      const response = await fetch('/api/ai/chat', {
+      const API = import.meta.env.VITE_API_URL || '';
+      const response = await fetch(`${API}/api/ai/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, message: payload.message, history: payload.history }),

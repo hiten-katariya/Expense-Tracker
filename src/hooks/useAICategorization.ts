@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import type { AICategorization } from '@/types';
 
+const API = import.meta.env.VITE_API_URL || '';
+
 export function useAICategorization(userId: string | undefined) {
   const queryClient = useQueryClient();
 
@@ -36,7 +38,7 @@ export function useAICategorization(userId: string | undefined) {
       amount: number;
       categories: Array<{ id: string; name: string }>;
     }) => {
-      const response = await fetch('/api/ai/categorize', {
+      const response = await fetch(`${API}/api/ai/categorize`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -58,7 +60,7 @@ export function useAICategorization(userId: string | undefined) {
       categoryId: string;
       categoryName: string;
     }) => {
-      const response = await fetch('/api/ai/accept-suggestion', {
+      const response = await fetch(`${API}/api/ai/accept-suggestion`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -78,7 +80,7 @@ export function useAICategorization(userId: string | undefined) {
       categorizationId: string | null;
       expenseId: string | null;
     }) => {
-      const response = await fetch('/api/ai/reject-suggestion', {
+      const response = await fetch(`${API}/api/ai/reject-suggestion`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

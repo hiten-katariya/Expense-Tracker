@@ -567,7 +567,8 @@ export function ExpenseFormPage() {
   const checkMerchantAlias = async (rawName: string) => {
     if (!rawName || rawName.trim().length < 3) return;
     try {
-      const response = await fetch('/api/ai/merchant', {
+      const API = import.meta.env.VITE_API_URL || '';
+      const response = await fetch(`${API}/api/ai/merchant`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: profile!.id, rawName }),

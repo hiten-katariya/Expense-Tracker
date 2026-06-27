@@ -16,6 +16,8 @@ import { SafeAvatar } from '@/components/Avatar';
 import { Modal } from '@/components/Modal';
 import { toast } from 'sonner';
 
+const API = import.meta.env.VITE_API_URL || '';
+
 const profileSchema = z.object({
   full_name: z.string().min(2, 'Name must be at least 2 characters').optional().nullable(),
   currency_code: z.string(),
@@ -121,7 +123,7 @@ export function SettingsPage() {
     const toastId = toast.loading('Compiling your GDPR data archive. Please wait...');
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const response = await fetch('/api/gdpr/export', {
+      const response = await fetch(`${API}/api/gdpr/export`, {
         headers: {
           Authorization: `Bearer ${session?.access_token || ''}`,
         },
@@ -156,7 +158,7 @@ export function SettingsPage() {
     const toastId = toast.loading('Verifying identity and scheduling soft deletion...');
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const response = await fetch('/api/gdpr/delete', {
+      const response = await fetch(`${API}/api/gdpr/delete`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -188,7 +190,7 @@ export function SettingsPage() {
   useEffect(() => {
     async function fetchPreferences() {
       try {
-        const response = await fetch('/api/email/preferences');
+        const response = await fetch(`${API}/api/email/preferences`);
         if (response.ok) {
           const json = await response.json();
           if (json.data) {
@@ -217,7 +219,7 @@ export function SettingsPage() {
     setEmailPrefs(updatedPrefs);
     
     try {
-      const response = await fetch('/api/email/preferences', {
+      const response = await fetch(`${API}/api/email/preferences`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatedPrefs)
