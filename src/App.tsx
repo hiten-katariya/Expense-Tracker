@@ -126,9 +126,47 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 // Stealth Admin Route: shows 404 for non-admins, never reveals admin exists
 function AdminRoute({ children }: { children: React.ReactNode }) {
-  const { user, profile, isInitialized } = useAuthStore();
+  const { user, profile, isInitialized, refreshProfile } = useAuthStore();
+  const [isVerifying, setIsVerifying] = React.useState(false);
+  const [verifyAttempted, setVerifyAttempted] = React.useState(false);
 
-  if (!isInitialized) {
+  const adminEmail = import.meta.env.VITE_ADMIN_EMAIL;
+  const emailMatches = !!user && !!adminEmail &&
+    user.email?.toLowerCase() === adminEmail.toLowerCase();
+
+  // When email matches but is_admin is not set (fresh OAuth registration),
+  // trigger backend auto-promotion then refresh the local profile.
+  React.useEffect(() => {
+    if (!isInitialized || !emailMatches || profile?.is_admin || verifyAttempted) return;
+
+    let cancelled = false;
+    setIsVerifying(true);
+
+    (async () => {
+      try {
+        // Hit any admin endpoint — requireAdmin middleware will auto-promote
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          await fetch('/api/admin/stats', {
+            headers: { Authorization: `Bearer ${session.access_token}` },
+          });
+        }
+        // Refresh profile to pick up is_admin = true from DB
+        await refreshProfile();
+      } catch {
+        // Silently fail — will fall through to 404
+      } finally {
+        if (!cancelled) {
+          setIsVerifying(false);
+          setVerifyAttempted(true);
+        }
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [isInitialized, emailMatches, profile?.is_admin, verifyAttempted, refreshProfile]);
+
+  if (!isInitialized || isVerifying) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="h-12 w-12 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
@@ -137,8 +175,7 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   }
 
   // Show 404 for non-admins — NEVER show 403 or redirect to login
-  const adminEmail = import.meta.env.VITE_ADMIN_EMAIL;
-  if (!user || !profile?.is_admin || user.email !== adminEmail) {
+  if (!user || !profile?.is_admin || !emailMatches) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center relative overflow-hidden">
         <div className="fixed inset-0 grid-bg opacity-[0.04] dark:opacity-[0.07]" />

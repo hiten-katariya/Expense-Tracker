@@ -1988,11 +1988,19 @@ app.get('/api/audit-logs', authenticateUser, async (req, res) => {
 // Admin middleware: dual-gate (email whitelist + database is_admin). Always returns 404 for unauthorized.
 async function requireAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
   const user = (req as any).user;
-  if (!user) return res.status(404).json({ error: 'Not found' });
+  console.log('[ADMIN DEBUG] requireAdmin called for path:', req.path);
+  console.log('[ADMIN DEBUG] user present:', !!user, '| user.email:', user?.email);
 
-  // Gate 1: Email whitelist
+  if (!user) {
+    console.log('[ADMIN DEBUG] ❌ BLOCKED: no user on request');
+    return res.status(404).json({ error: 'Not found' });
+  }
+
+  // Gate 1: Email whitelist (case-insensitive)
   const adminEmail = process.env.ADMIN_EMAIL;
-  if (!adminEmail || user.email !== adminEmail) {
+  console.log('[ADMIN DEBUG] Gate 1 — ADMIN_EMAIL env:', adminEmail, '| user.email:', user.email);
+  if (!adminEmail || user.email?.toLowerCase() !== adminEmail.toLowerCase()) {
+    console.log('[ADMIN DEBUG] ❌ BLOCKED at Gate 1: email mismatch');
     logAuditEvent({
       userId: user.id, entityType: 'admin_access', entityId: null,
       eventType: 'admin_access_denied', req,
@@ -2000,23 +2008,45 @@ async function requireAdmin(req: express.Request, res: express.Response, next: e
     });
     return res.status(404).json({ error: 'Not found' });
   }
+  console.log('[ADMIN DEBUG] ✅ Gate 1 passed');
 
   // Gate 2: Database role check via service role
   try {
     const { data: profile, error } = await supabaseAdmin
       .from('profiles').select('is_admin').eq('id', user.id).single();
-    if (error || !profile?.is_admin) {
-      logAuditEvent({
-        userId: user.id, entityType: 'admin_access', entityId: null,
-        eventType: 'admin_access_denied', req,
-        newValue: { reason: 'not_admin_in_db' }
-      });
+
+    console.log('[ADMIN DEBUG] Gate 2 — DB result:', { profile, error: error?.message });
+
+    if (error) {
+      console.log('[ADMIN DEBUG] ❌ BLOCKED at Gate 2: DB error:', error.message);
       return res.status(404).json({ error: 'Not found' });
     }
+
+    if (!profile?.is_admin) {
+      console.log('[ADMIN DEBUG] is_admin is false — auto-promoting...');
+      const { error: promoteError } = await supabaseAdmin
+        .from('profiles')
+        .update({ is_admin: true })
+        .eq('id', user.id);
+
+      if (promoteError) {
+        console.error('[ADMIN DEBUG] ❌ Auto-promote failed:', promoteError);
+        return res.status(404).json({ error: 'Not found' });
+      }
+
+      console.log('[ADMIN DEBUG] ✅ Auto-promote succeeded');
+      logAuditEvent({
+        userId: user.id, entityType: 'admin_access', entityId: null,
+        eventType: 'admin_auto_promoted', req,
+        newValue: { reason: 'email_matched_whitelist_auto_promoted' }
+      });
+    }
   } catch (err) {
+    console.log('[ADMIN DEBUG] ❌ BLOCKED: exception in Gate 2:', err);
     return res.status(404).json({ error: 'Not found' });
   }
 
+  console.log('[ADMIN DEBUG] ✅ ALL GATES PASSED — granting admin access for:', req.path);
   // Audit successful admin access
   logAuditEvent({
     userId: user.id, entityType: 'admin_access', entityId: null,
@@ -2426,6 +2456,16 @@ app.get('/api/admin/system-health', authenticateUser, requireAdmin, async (req, 
     return res.status(500).json({ error: 'Failed to fetch system health' });
   }
 });
+
+// --- GLOBAL API 404 CATCH-ALL ---
+// In Express 5, app.use('/prefix', handler) intercepts ALL matching requests
+// including defined routes. Instead, add a single catch-all at the very end
+// that returns 404 for any unmatched /api/* request. This covers:
+// /api/admin/*, /api/system/*, /api/internal/*, /api/queue/*, /api/worker/*
+// and any other undefined API endpoint.
+app.use('/api', ((_req: express.Request, res: express.Response) => {
+  res.status(404).json({ error: 'Not found' });
+}) as express.RequestHandler);
 
 // Initialize background sweep interval for soft deleted users and old audit logs (commences every 24 hours)
 setInterval(() => {
